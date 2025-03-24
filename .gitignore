@@ -5,3 +5,7 @@ postgres_data/
 Test Inputs/
 Test Outputs/
 *.log
+
+__pycache__/
+*.py[cod]
+*$py.class
