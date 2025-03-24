@@ -196,7 +196,29 @@ class GraphQLClient:
         
         try:
             async with aiohttp.ClientSession() as session:
+                # Log the request
+                logger.debug(f"Sending GraphQL request to {self.url}")
+                
                 async with session.post(self.url, json=payload, headers=headers) as response:
+                    # Log the response status
+                    logger.debug(f"GraphQL response status: {response.status}")
+                    
+                    if response.status != 200:
+                        # Try to get text content for better error messages
+                        content_type = response.headers.get("Content-Type", "")
+                        response_text = await response.text()
+                        
+                        error_msg = f"GraphQL server returned status {response.status}"
+                        logger.error(f"{error_msg}\nResponse: {response_text[:500]}")
+                        
+                        # If we got a 404, give more helpful suggestions
+                        if response.status == 404:
+                            logger.error(f"GraphQL endpoint not found at: {self.url}")
+                            logger.error("Check if Hasura is running and if the URL is correct")
+                            logger.error("Common URLs: http://localhost:8080/v1/graphql, http://hasura:8080/v1/graphql")
+                        
+                        raise GraphQLClientError(error_msg)
+                    
                     result = await response.json()
                     
                     if "errors" in result:
