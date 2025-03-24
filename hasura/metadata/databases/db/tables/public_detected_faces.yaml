@@ -1,0 +1,15 @@
+table:
+  name: detected_faces
+  schema: public
+object_relationships:
+  - name: frame
+    using:
+      foreign_key_constraint_on: frame_id
+array_relationships:
+  - name: face_matches
+    using:
+      foreign_key_constraint_on:
+        column: detection_id
+        table:
+          name: face_matches
+          schema: public

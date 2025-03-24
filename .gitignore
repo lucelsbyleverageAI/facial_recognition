@@ -1,0 +1,7 @@
+.env
+venv/
+postgres_data/
+**/cache/
+Test Inputs/
+Test Outputs/
+*.log

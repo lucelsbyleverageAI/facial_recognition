@@ -1,0 +1,15 @@
+table:
+  name: frames
+  schema: public
+object_relationships:
+  - name: clip
+    using:
+      foreign_key_constraint_on: clip_id
+array_relationships:
+  - name: detected_faces
+    using:
+      foreign_key_constraint_on:
+        column: frame_id
+        table:
+          name: detected_faces
+          schema: public

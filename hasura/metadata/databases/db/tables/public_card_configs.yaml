@@ -1,0 +1,18 @@
+table:
+  name: card_configs
+  schema: public
+object_relationships:
+  - name: card
+    using:
+      foreign_key_constraint_on: card_id
+  - name: lut
+    using:
+      foreign_key_constraint_on: lut_id
+array_relationships:
+  - name: watch_folders
+    using:
+      foreign_key_constraint_on:
+        column: config_id
+        table:
+          name: watch_folders
+          schema: public
