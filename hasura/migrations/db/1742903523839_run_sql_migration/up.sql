@@ -38,9 +38,7 @@ CREATE TABLE consent_faces (
     profile_id UUID NOT NULL REFERENCES consent_profiles(profile_id) ON DELETE CASCADE,
     face_image_path TEXT NOT NULL,
     pose_type TEXT CHECK (pose_type IN ('F', 'S')),
-    face_embedding JSONB,
-    last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT unique_face_image_path UNIQUE (face_image_path)
+    face_embedding JSONB
 );
 
 -- Create cards table
@@ -145,34 +143,3 @@ CREATE INDEX idx_face_match_detection_id ON face_matches(detection_id);
 CREATE INDEX idx_face_match_consent_face_id ON face_matches(consent_face_id);
 CREATE INDEX idx_consent_face_profile_id ON consent_faces(profile_id);
 CREATE INDEX idx_consent_profile_project_id ON consent_profiles(project_id);
-
--- Drop existing function if it exists
-DROP FUNCTION IF EXISTS create_default_card_config() CASCADE;
-
--- Create a function to insert a default card config when a new card is added
-CREATE FUNCTION create_default_card_config() RETURNS TRIGGER AS $$
-BEGIN
-    INSERT INTO card_configs (
-        config_id, card_id, scene_sensitivity, fallback_frame_rate, use_eq, 
-        model_name, detector_backend, align, enforce_detection, distance_metric, 
-        expand_percentage, threshold, normalization, silent, refresh_database, 
-        anti_spoofing, detection_confidence_threshold
-    )
-    VALUES (
-        gen_random_uuid(), NEW.card_id, 
-        0.2, 6, TRUE,  -- Default values
-        'FACENET512', 'retinaface', FALSE, FALSE, 'euclidean_l2', 
-        0.0, NULL, 'base', TRUE, TRUE, 
-        FALSE, 0.5
-    );
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Drop trigger if it already exists
-DROP TRIGGER IF EXISTS trigger_create_card_config ON cards;
-
--- Create a trigger that calls the function after inserting a new card
-CREATE TRIGGER trigger_create_card_config
-AFTER INSERT ON cards
-FOR EACH ROW EXECUTE FUNCTION create_default_card_config();

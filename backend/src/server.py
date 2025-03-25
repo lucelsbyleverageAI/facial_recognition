@@ -5,7 +5,8 @@ import logging
 import time
 from fastapi import Request
 
-from src.api import get_projects  # Changed from consent_import to get_projects
+from src.api import scan_consent_folders  # Changed from get_projects to scan_consent_folders
+from src.api import images  # Add the new images router
 from src.utils.env_loader import load_environment_variables
 
 # Configure logging
@@ -39,7 +40,8 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(get_projects.router)
+app.include_router(scan_consent_folders.router)
+app.include_router(images.router)  # Include the images router
 
 @app.get("/")
 async def root():

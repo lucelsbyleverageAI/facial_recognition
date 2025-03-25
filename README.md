@@ -29,7 +29,7 @@ The backend is a FastAPI server that uses deep learning models for face analysis
 
 4. Run the development server:
    ```bash
-   poetry run uvicorn api.main:app --reload
+   poetry run uvicorn src.server:app --reload
    ```
 
 The API will be available at:
@@ -47,5 +47,24 @@ The API will be available at:
 - `poetry run <command>`: Run a command with the dependencies
 - `exit`: Exit the virtual environment
 
+## Hasura
 
+Hasura is a tool for managing the database. It's managed using Docker Compose.
 
+### Prerequisites
+- Docker Compose
+
+### Setup
+
+1. Start the Harura service using docker compose:
+   ```bash
+   docker compose up -d
+   ```
+
+2. For development, navigate to the hasura directory and start the console using Hasura CLI:
+   ```bash
+   cd hasura
+   & "C:\hasura\hasura.exe" console 
+   or
+   hasura console
+   ```

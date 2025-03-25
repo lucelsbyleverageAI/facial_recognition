@@ -82,12 +82,12 @@ async def scan_consent_folders(request: ScanConsentFoldersRequest):
             projects_found=stats.get("projects_found", 0),
             projects_created=stats.get("projects_created", 0),
             projects_updated=stats.get("projects_updated", 0),
-            consent_profiles_found=stats.get("profiles_found", 0),
-            consent_profiles_created=stats.get("profiles_created", 0),
-            consent_profiles_updated=stats.get("profiles_updated", 0),
-            consent_images_found=stats.get("faces_found", 0),
-            consent_images_created=stats.get("faces_created", 0),
-            consent_images_updated=stats.get("faces_updated", 0)
+            consent_profiles_found=stats.get("consent_profiles_found", 0),
+            consent_profiles_created=stats.get("consent_profiles_created", 0),
+            consent_profiles_updated=stats.get("consent_profiles_updated", 0),
+            consent_images_found=stats.get("consent_images_found", 0),
+            consent_images_created=stats.get("consent_images_created", 0),
+            consent_images_updated=stats.get("consent_images_updated", 0)
         )
         
         print(f"Returning response: status={response.status}")
