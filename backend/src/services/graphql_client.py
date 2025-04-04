@@ -189,10 +189,30 @@ class GraphQLClient:
             "x-hasura-admin-secret": self.admin_secret
         }
         
+        # Normalize variables and convert any UUID objects to strings
+        normalized_variables = {}
+        if variables:
+            for key, value in variables.items():
+                # Handle UUID types by converting to strings
+                if hasattr(value, 'hex') and callable(getattr(value, 'hex')):
+                    normalized_variables[key] = str(value)
+                else:
+                    normalized_variables[key] = value
+        else:
+            normalized_variables = {}
+        
         payload = {
             "query": query,
-            "variables": variables or {}
+            "variables": normalized_variables
         }
+        
+        # Pretty-print the query and variables for debugging
+        try:
+            payload_json = json.dumps(payload, indent=2)
+            logger.debug(f"GraphQL request payload:\n{payload_json}")
+        except Exception as e:
+            logger.debug(f"Could not format payload: {str(e)}")
+            logger.debug(f"Raw payload: {payload}")
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -203,10 +223,12 @@ class GraphQLClient:
                     # Log the response status
                     logger.debug(f"GraphQL response status: {response.status}")
                     
+                    response_text = await response.text()
+                    logger.debug(f"GraphQL response body: {response_text[:1000]}")
+                    
                     if response.status != 200:
                         # Try to get text content for better error messages
                         content_type = response.headers.get("Content-Type", "")
-                        response_text = await response.text()
                         
                         error_msg = f"GraphQL server returned status {response.status}"
                         logger.error(f"{error_msg}\nResponse: {response_text[:500]}")
@@ -219,14 +241,26 @@ class GraphQLClient:
                         
                         raise GraphQLClientError(error_msg)
                     
-                    result = await response.json()
+                    # Parse the JSON response
+                    try:
+                        result = await response.json()
+                    except Exception as json_error:
+                        error_msg = f"Failed to parse GraphQL response as JSON: {str(json_error)}"
+                        logger.error(f"{error_msg}\nResponse text: {response_text[:500]}")
+                        raise GraphQLClientError(error_msg) from json_error
                     
+                    # Check for GraphQL errors
                     if "errors" in result:
                         error_msg = f"GraphQL error: {json.dumps(result['errors'])}"
                         logger.error(error_msg)
                         raise GraphQLClientError(error_msg)
                     
-                    return result.get("data", {})
+                    # Return the data section of the response
+                    if "data" in result:
+                        return result["data"]
+                    else:
+                        logger.warning(f"GraphQL response missing 'data' key: {result.keys()}")
+                        return result
         except aiohttp.ClientError as e:
             error_msg = f"Network error during GraphQL request: {str(e)}"
             logger.error(error_msg)

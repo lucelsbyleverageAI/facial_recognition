@@ -4,9 +4,13 @@ import os
 import logging
 import time
 from fastapi import Request
+import asyncio
 
 from src.api import scan_consent_folders  # Changed from get_projects to scan_consent_folders
 from src.api import images  # Add the new images router
+from src.api import scan_watch_folder  # Import the new scan_watch_folder router
+from src.api import watch_folder_monitor  # Import the new watch folder monitoring API
+from src.services.watch_folder_monitor import cleanup_monitors  # Import the cleanup function
 from src.utils.env_loader import load_environment_variables
 
 # Configure logging
@@ -30,6 +34,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Register a startup event to initialize the background tasks system
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Application starting up")
+
+# Register a shutdown event to cleanup resources, especially active monitors
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("Application shutting down, cleaning up resources")
+    try:
+        await cleanup_monitors()
+    except Exception as e:
+        logger.exception(f"Error during cleanup: {str(e)}")
+
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
@@ -42,6 +60,8 @@ app.add_middleware(
 # Include routers
 app.include_router(scan_consent_folders.router)
 app.include_router(images.router)  # Include the images router
+app.include_router(scan_watch_folder.router)  # Include the new scan_watch_folder router
+app.include_router(watch_folder_monitor.router)  # Include the new watch folder monitoring router
 
 @app.get("/")
 async def root():

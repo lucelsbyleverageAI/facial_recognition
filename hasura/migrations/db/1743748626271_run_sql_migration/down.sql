@@ -1,0 +1,14 @@
+-- Could not auto-generate a down migration.
+-- Please write an appropriate down migration for the SQL below:
+-- -- Drop existing tables if they exist
+-- DROP TABLE IF EXISTS face_matches CASCADE;
+-- DROP TABLE IF EXISTS detected_faces CASCADE;
+-- DROP TABLE IF EXISTS frames CASCADE;
+-- DROP TABLE IF EXISTS clips CASCADE;
+-- DROP TABLE IF EXISTS watch_folders CASCADE;
+-- DROP TABLE IF EXISTS card_configs CASCADE;
+-- DROP TABLE IF EXISTS cards CASCADE;
+-- DROP TABLE IF EXISTS consent_faces CASCADE;
+-- DROP TABLE IF EXISTS consent_profiles CASCADE;
+-- DROP TABLE IF EXISTS projects CASCADE;
+-- DROP TABLE IF EXISTS luts CASCADE;

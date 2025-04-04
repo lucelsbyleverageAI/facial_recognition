@@ -2,6 +2,7 @@
 
 import { ReactNode } from 'react';
 import { Header } from './Header';
+import { Toaster } from '@/components/ui/toaster';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -21,6 +22,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           <p>Facial Recognition Processing System</p>
         </div>
       </footer>
+      <Toaster />
     </div>
   );
 } 

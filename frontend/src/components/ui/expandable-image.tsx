@@ -30,6 +30,7 @@ interface ExpandableImageProps {
   width?: number;
   height?: number;
   className?: string;
+  isTriggerOnly?: boolean;
 }
 
 export function ExpandableImage({ 
@@ -37,7 +38,8 @@ export function ExpandableImage({
   alt, 
   width = 64, 
   height = 64, 
-  className = '' 
+  className = '', 
+  isTriggerOnly = false 
 }: ExpandableImageProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,31 +47,41 @@ export function ExpandableImage({
   // Use the image proxy to get the URL
   const imageUrl = getImageUrl(src);
   
+  // Inner content (image + overlay + skeleton)
+  const imageContent = (
+    <div 
+      className={`relative group ${isTriggerOnly ? 'cursor-pointer' : ''} overflow-hidden rounded-md ${className}`}
+      style={{ width, height }}
+      // Add onClick handler only if it's NOT just a trigger, to open its own dialog
+      onClick={isTriggerOnly ? undefined : () => setIsOpen(true)}
+    >
+      <img 
+        src={imageUrl}
+        alt={alt}
+        width={width}
+        height={height}
+        className="object-cover w-full h-full transition-transform group-hover:scale-105"
+        onLoad={() => setIsLoading(false)}
+        onError={() => setIsLoading(false)}
+      />
+      <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+      {isLoading && (
+        <Skeleton className="absolute inset-0" />
+      )}
+    </div>
+  );
+  
+  // Render directly if it's only a trigger for an external modal
+  if (isTriggerOnly) {
+    return imageContent;
+  }
+
+  // Otherwise, wrap with its own Dialog for self-expansion
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <div className={`relative group cursor-pointer overflow-hidden rounded-md ${className}`} style={{ width, height }}>
-          {/* Thumbnail */}
-          <img 
-            src={imageUrl}
-            alt={alt}
-            width={width}
-            height={height}
-            className="object-cover w-full h-full transition-transform group-hover:scale-105"
-            onLoad={() => setIsLoading(false)}
-            onError={() => setIsLoading(false)}
-          />
-          
-          {/* Very subtle hover effect without icon */}
-          <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-          
-          {/* Loading skeleton */}
-          {isLoading && (
-            <Skeleton className="absolute inset-0" />
-          )}
-        </div>
+        {imageContent} 
       </DialogTrigger>
-      
       <DialogContent className="sm:max-w-3xl max-h-[80vh] p-1">
         {/* Add DialogTitle for accessibility - visually hidden but available to screen readers */}
         <DialogTitle className="sr-only">

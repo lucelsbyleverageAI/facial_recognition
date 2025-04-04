@@ -5,7 +5,7 @@
 - [x] 3. Create hasura directory for migrations, seeds, and metadata
 - [x] 4. Build a simple backend API server using poetry for package management
 - [x] 5. Build the first API endpoint for scan-consent-folders
-- [ ] 6. Build the frontend projects dashboard page
+- [x] 6. Build the frontend projects dashboard page
 - [ ] 7. Build the card details page in the frontend 
 - [ ] 8. Implement the scan-watch-folder endpoint
 - [ ] 9. Implement the start-watch-folder-monitoring endpoint

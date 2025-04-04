@@ -8,7 +8,6 @@ DROP TABLE IF EXISTS card_configs CASCADE;
 DROP TABLE IF EXISTS cards CASCADE;
 DROP TABLE IF EXISTS consent_faces CASCADE;
 DROP TABLE IF EXISTS consent_profiles CASCADE;
-DROP TABLE IF EXISTS luts CASCADE;
 DROP TABLE IF EXISTS projects CASCADE;
 
 -- Create projects table
@@ -16,13 +15,6 @@ CREATE TABLE projects (
     project_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_name TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create luts table
-CREATE TABLE luts (
-    lut_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    file_name TEXT NOT NULL,
-    file_path TEXT NOT NULL
 );
 
 -- Create consent_profiles table
@@ -60,8 +52,18 @@ CREATE TABLE card_configs (
     scene_sensitivity NUMERIC DEFAULT 0.2 CHECK (scene_sensitivity >= 0 AND scene_sensitivity <= 1),
     fallback_frame_rate INTEGER DEFAULT 6 CHECK (fallback_frame_rate > 0),
     use_eq BOOLEAN DEFAULT TRUE,
-    lut_id UUID REFERENCES luts(lut_id) ON DELETE SET NULL,
-    model_name TEXT DEFAULT 'FACENET512' CHECK (model_name IN ('VGG-Face', 'Facenet', 'Facenet512', 'OpenFace', 'DeepFace', 'DeepID', 'Dlib', 'ArcFace', 'SFace', 'GhostFaceNet')),
+    lut_file TEXT CHECK (
+        lut_file IS NULL OR 
+        lut_file IN ('From_SLog2SGamut_To_Cine+709.cube', 
+                     'From_SLog2SGamut_To_LC-709_.cube', 
+                     'From_SLog2SGamut_To_LC-709TypeA.cube', 
+                     'From_SLog2SGamut_To_SLog2-709_.cube', 
+                     '1_SGamut3CineSLog3_To_LC-709.cube', 
+                     '2_SGamut3CineSLog3_To_LC-709TypeA.cube', 
+                     '3_SGamut3CineSLog3_To_SLog2-709.cube', 
+                     '4_SGamut3CineSLog3_To_Cine+709.cube')
+    ),
+    model_name TEXT DEFAULT 'Facenet512' CHECK (model_name IN ('VGG-Face', 'Facenet', 'Facenet512', 'OpenFace', 'DeepFace', 'DeepID', 'Dlib', 'ArcFace', 'SFace', 'GhostFaceNet')),
     detector_backend TEXT DEFAULT 'retinaface' CHECK (detector_backend IN ('opencv', 'retinaface', 'mtcnn', 'ssd', 'dlib', 'mediapipe', 'yolov8', 'yolov11n', 'yolov11s', 'yolov11m', 'centerface', 'skip')),
     align BOOLEAN DEFAULT FALSE,
     enforce_detection BOOLEAN DEFAULT FALSE,
@@ -73,7 +75,8 @@ CREATE TABLE card_configs (
     refresh_database BOOLEAN DEFAULT TRUE,
     anti_spoofing BOOLEAN DEFAULT FALSE,
     detection_confidence_threshold NUMERIC DEFAULT 0.5 CHECK (detection_confidence_threshold >= 0 AND detection_confidence_threshold <= 1),
-    CONSTRAINT video_config_card_id_key UNIQUE (card_id)
+    CONSTRAINT video_config_card_id_key UNIQUE (card_id),
+    CONSTRAINT eq_lut_constraint CHECK ((use_eq = TRUE AND lut_file IS NULL) OR (use_eq = FALSE AND lut_file IS NOT NULL))
 );
 
 -- Create watch_folders table (now associated with card_config)
@@ -81,7 +84,7 @@ CREATE TABLE watch_folders (
     watch_folder_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     config_id UUID NOT NULL REFERENCES card_configs(config_id) ON DELETE CASCADE,
     folder_path TEXT NOT NULL,
-    status TEXT DEFAULT 'Idle' CHECK (status IN ('idle', 'active', 'error')),
+    status TEXT DEFAULT 'idle' CHECK (status IN ('idle', 'scanned', 'active', 'error')),
     CONSTRAINT watch_folder_config_id_key UNIQUE (config_id, folder_path)
 );
 
@@ -89,11 +92,12 @@ CREATE TABLE watch_folders (
 CREATE TABLE clips (
     clip_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     card_id UUID NOT NULL REFERENCES cards(card_id) ON DELETE CASCADE,
-    watch_folder_id UUID NOT NULL REFERENCES watch_folders(watch_folder_id) ON DELETE CASCADE,
+    watch_folder_id UUID REFERENCES watch_folders(watch_folder_id) ON DELETE SET NULL,
     filename TEXT NOT NULL,
     path TEXT NOT NULL,
     status TEXT CHECK (status IN ('pending', 'unselected', 'queued', 'extracting_frames', 'extraction_complete', 'processing_complete', 'error')),
-    error_message TEXT
+    error_message TEXT,
+    CONSTRAINT unique_card_filename UNIQUE (card_id, filename)
 );
 
 -- Create frame table
@@ -153,15 +157,15 @@ DROP FUNCTION IF EXISTS create_default_card_config() CASCADE;
 CREATE FUNCTION create_default_card_config() RETURNS TRIGGER AS $$
 BEGIN
     INSERT INTO card_configs (
-        config_id, card_id, scene_sensitivity, fallback_frame_rate, use_eq, 
+        config_id, card_id, scene_sensitivity, fallback_frame_rate, use_eq, lut_file,
         model_name, detector_backend, align, enforce_detection, distance_metric, 
         expand_percentage, threshold, normalization, silent, refresh_database, 
         anti_spoofing, detection_confidence_threshold
     )
     VALUES (
         gen_random_uuid(), NEW.card_id, 
-        0.2, 6, TRUE,  -- Default values
-        'FACENET512', 'retinaface', FALSE, FALSE, 'euclidean_l2', 
+        0.2, 6, TRUE, NULL,  -- Default values with use_eq=TRUE and lut_file=NULL
+        'Facenet512', 'retinaface', FALSE, FALSE, 'euclidean_l2', 
         0.0, NULL, 'base', TRUE, TRUE, 
         FALSE, 0.5
     );

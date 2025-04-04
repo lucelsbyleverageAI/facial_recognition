@@ -90,7 +90,6 @@ Scans a watch folder for video clips and adds them to the database.
 **Request Body:**
 ```json
 {
-  "card_id": "uuid-string",
   "watch_folder_id": "uuid-string",
   "folder_path": "/path/to/watch/folder"
 }
