@@ -106,17 +106,34 @@ class FaceService:
                 # Check if the image has been modified since last update
                 db_last_updated = await self._get_face_last_updated(existing_face_id)
                 
-                # If file has been modified since last database update or no last_updated is stored
-                if db_last_updated is None or last_updated > db_last_updated:
-                    # Update the face with new timestamp and reset face_embedding
+                # CRITICAL CHECK: Check if face has an embedding before potentially updating
+                has_embedding = await self._check_face_has_embedding(existing_face_id)
+                
+                # NEVER UPDATE FACES WITH EMBEDDINGS - This is the key to preventing loss of embeddings
+                if has_embedding:
+                    return existing_face_id, "unchanged"
+                
+                # Only update faces without embeddings if they've been modified
+                update_needed = False
+                
+                if db_last_updated is None:
+                    # No timestamp in DB, update needed
+                    update_needed = True
+                else:
+                    # For faces without embeddings - use a 1 second threshold
+                    time_diff = (last_updated - db_last_updated).total_seconds()
+                    if time_diff > 1:  # 1 second threshold
+                        update_needed = True
+                
+                # If update is needed, proceed (only for faces without embeddings)
+                if update_needed:
+                    # Update the face with new timestamp
                     updated = await self._update_face(existing_face_id, last_updated)
                     if updated:
-                        logger.info(f"Updated consent face with ID {existing_face_id} due to modified image")
                         return existing_face_id, "updated"
                     else:
                         raise Exception("Failed to update consent face")
                 else:
-                    logger.info(f"Face {existing_face_id} already exists with up-to-date image, skipping")
                     return existing_face_id, "unchanged"
             
             # 2. Otherwise, check if a face with this ID exists but with a different path
@@ -194,7 +211,7 @@ class FaceService:
     
     async def _update_face(self, face_id: str, last_updated: datetime.datetime) -> bool:
         """
-        Update a face with a new last_updated timestamp and reset face_embedding.
+        Update a face with a new last_updated timestamp without resetting face_embedding.
         
         Args:
             face_id: Face ID
@@ -203,11 +220,18 @@ class FaceService:
         Returns:
             True if successful, False otherwise
         """
+        # Double-check if face has an embedding - extra safety measure
+        has_embedding = await self._check_face_has_embedding(face_id)
+        if has_embedding:
+            # If it has an embedding, we should never reach this point due to earlier checks
+            # But as an extra safety measure, skip the update
+            return True  # Return true to prevent further error handling
+        
         mutation = """
         mutation UpdateConsentFace($face_id: uuid!, $last_updated: timestamptz!) {
             update_consent_faces_by_pk(
                 pk_columns: {consent_face_id: $face_id}, 
-                _set: {last_updated: $last_updated, face_embedding: null}
+                _set: {last_updated: $last_updated}
             ) {
                 consent_face_id
             }
@@ -220,9 +244,60 @@ class FaceService:
         }
         
         result = await self.graphql_client.execute_async(mutation, variables)
-        
-        return (result.get("update_consent_faces_by_pk") and 
+        success = (result.get("update_consent_faces_by_pk") and 
                 result["update_consent_faces_by_pk"].get("consent_face_id") is not None)
+        
+        return success
+    
+    async def _check_face_has_embedding(self, face_id: str) -> bool:
+        """
+        Check if a face has an embedding.
+        
+        Args:
+            face_id: Face ID
+            
+        Returns:
+            True if face has an embedding, False otherwise
+        """
+        query = """
+        query GetFaceEmbedding($face_id: uuid!) {
+            consent_faces_by_pk(consent_face_id: $face_id) {
+                face_embedding
+            }
+        }
+        """
+        
+        result = await self.graphql_client.execute_async(query, {"face_id": face_id})
+        
+        if result.get("consent_faces_by_pk") and result["consent_faces_by_pk"].get("face_embedding") is not None:
+            return True
+        
+        return False
+        
+    async def _get_face_embedding(self, face_id: str) -> Optional[dict]:
+        """
+        Get the embedding for a face.
+        
+        Args:
+            face_id: Face ID
+            
+        Returns:
+            Face embedding if exists, None otherwise
+        """
+        query = """
+        query GetFaceEmbedding($face_id: uuid!) {
+            consent_faces_by_pk(consent_face_id: $face_id) {
+                face_embedding
+            }
+        }
+        """
+        
+        result = await self.graphql_client.execute_async(query, {"face_id": face_id})
+        
+        if result.get("consent_faces_by_pk"):
+            return result["consent_faces_by_pk"].get("face_embedding")
+        
+        return None
     
     async def _check_face_by_id(self, face_id: str) -> bool:
         """

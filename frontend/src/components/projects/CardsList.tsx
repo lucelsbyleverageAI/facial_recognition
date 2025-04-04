@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CreditCard, Copy, Check } from 'lucide-react';
 import type { Card } from '@/types';
+import { formatStatus } from '@/lib/utils';
 
 interface CardsListProps {
   cards: Card[];
@@ -35,6 +36,7 @@ export function CardsList({
       case 'complete':
         return 'bg-green-500';
       case 'processing':
+      case 'generating_embeddings':
         return 'bg-blue-500';
       case 'paused':
         return 'bg-amber-500';
@@ -44,16 +46,7 @@ export function CardsList({
   };
   
   const getStatusText = (status: Card['status']) => {
-    switch (status) {
-      case 'complete':
-        return 'Completed';
-      case 'processing':
-        return 'Processing';
-      case 'paused':
-        return 'Paused';
-      default:
-        return 'Pending';
-    }
+    return formatStatus(status);
   };
   
   const getBadgeVariant = (status: Card['status']) => {
@@ -61,6 +54,7 @@ export function CardsList({
       case 'complete':
         return 'default';
       case 'processing':
+      case 'generating_embeddings':
         return 'secondary';
       case 'paused':
         return 'outline';

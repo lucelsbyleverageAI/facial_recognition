@@ -6,5 +6,6 @@
 - "!include public_detected_faces.yaml"
 - "!include public_face_matches.yaml"
 - "!include public_frames.yaml"
+- "!include public_processing_tasks.yaml"
 - "!include public_projects.yaml"
 - "!include public_watch_folders.yaml"

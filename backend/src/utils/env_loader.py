@@ -12,17 +12,20 @@ def load_environment_variables():
         bool: True if all required variables are loaded, False otherwise
     """
     # Display current working directory
-    logger.info(f"Current working directory: {os.getcwd()}")
+    cwd = os.getcwd() # Get CWD
+    logger.info(f"Current working directory when loading .env: {cwd}") # Log the CWD
     
     # Load variables from .env file if it exists
-    dotenv_path = os.path.join(os.getcwd(), '.env')
+    dotenv_path = os.path.join(cwd, '.env') # Use CWD variable
+    logger.info(f"Attempting to load .env file from: {dotenv_path}") # Log the path being checked
     if os.path.exists(dotenv_path):
         logger.info(f".env file found at {dotenv_path}")
         load_dotenv(dotenv_path)
     else:
         logger.warning(f".env file not found at {dotenv_path}")
         # Try looking in the parent directory
-        parent_dotenv_path = os.path.join(os.path.dirname(os.getcwd()), '.env')
+        parent_dotenv_path = os.path.join(os.path.dirname(cwd), '.env') # Use CWD variable
+        logger.info(f"Attempting to load .env file from parent directory: {parent_dotenv_path}") # Log parent path check
         if os.path.exists(parent_dotenv_path):
             logger.info(f".env file found in parent directory: {parent_dotenv_path}")
             load_dotenv(parent_dotenv_path)
@@ -39,7 +42,9 @@ def load_environment_variables():
     for var in required_vars:
         value = os.getenv(var)
         if value:
-            logger.info(f"Found environment variable: {var}")
+            # Avoid logging the full secret
+            log_value = value[:5] + '...' if var == "HASURA_ADMIN_SECRET" and len(value) > 5 else value
+            logger.info(f"Found environment variable: {var}={log_value}")
         else:
             logger.warning(f"Missing environment variable: {var}")
     

@@ -34,6 +34,7 @@ class ScanConsentFoldersResponse(BaseModel):
     consent_images_found: int = 0
     consent_images_created: int = 0
     consent_images_updated: int = 0
+    consent_images_preserved: int = 0  # Add count of preserved faces with embeddings
 
 @router.post("/scan-consent-folders", response_model=ScanConsentFoldersResponse)
 async def scan_consent_folders(request: ScanConsentFoldersRequest):
@@ -73,8 +74,23 @@ async def scan_consent_folders(request: ScanConsentFoldersRequest):
         orchestrator = ProjectImportOrchestrator(consent_folder_path)
         print(f"Calling import_all_project_data with folder path: {consent_folder_path}")
         
+        # Log the start of the import process with timestamp
+        start_time = datetime.datetime.now()
+        logger.info(f"Starting project import process at {start_time}")
+        
         # Update the service call to include the consent folder path
         stats = await orchestrator.import_all_project_data(consent_folder_path)
+        
+        # Log completion with stats summary
+        end_time = datetime.datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        logger.info(f"Completed project import in {duration:.2f} seconds")
+        
+        # If there were errors, log them
+        if stats.get("errors"):
+            logger.warning(f"Import completed with {len(stats.get('errors', []))} errors")
+            for i, error in enumerate(stats.get("errors", [])):
+                logger.warning(f"Error {i+1}: {error}")
         
         # Convert service stats to response format
         response = ScanConsentFoldersResponse(
@@ -87,10 +103,10 @@ async def scan_consent_folders(request: ScanConsentFoldersRequest):
             consent_profiles_updated=stats.get("consent_profiles_updated", 0),
             consent_images_found=stats.get("consent_images_found", 0),
             consent_images_created=stats.get("consent_images_created", 0),
-            consent_images_updated=stats.get("consent_images_updated", 0)
+            consent_images_updated=stats.get("consent_images_updated", 0),
+            consent_images_preserved=stats.get("consent_images_with_embeddings_preserved", 0)
         )
         
-        print(f"Returning response: status={response.status}")
         return response
         
     except Exception as e:

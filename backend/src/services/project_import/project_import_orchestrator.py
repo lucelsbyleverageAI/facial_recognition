@@ -86,6 +86,7 @@ class ProjectImportOrchestrator:
             "consent_images_found": 0,
             "consent_images_created": 0,
             "consent_images_updated": 0,
+            "consent_images_with_embeddings_preserved": 0,  # Track preserved embeddings
             "errors": []
         }
         
@@ -143,12 +144,18 @@ class ProjectImportOrchestrator:
                                         profile_db_id, face_id, pose_type, image_path
                                     )
                                     
+                                    # Check if face has an embedding (after processing)
+                                    has_embedding = await self.face_service._check_face_has_embedding(result_id)
+                                    
                                     # Update stats based on operation
                                     if operation == "created":
                                         stats["consent_images_created"] += 1
                                     elif operation == "updated":
                                         stats["consent_images_updated"] += 1
-                                    # If 'unchanged', we don't update any counters
+                                    elif operation == "unchanged" and has_embedding:
+                                        # Count faces where we preserved embeddings
+                                        stats["consent_images_with_embeddings_preserved"] += 1
+                                        
                                 except Exception as e:
                                     error_msg = f"Error importing face {face_id} in profile {profile_id}: {str(e)}"
                                     logger.error(error_msg)
@@ -163,6 +170,9 @@ class ProjectImportOrchestrator:
                     error_msg = f"Error importing project {project_id}: {str(e)}"
                     logger.error(error_msg)
                     stats["errors"].append(error_msg)
+            
+            # Add summary logging for preserved embeddings
+            logger.info(f"Import complete - Found: {stats['consent_images_found']}, Created: {stats['consent_images_created']}, Updated: {stats['consent_images_updated']}")
             
             return stats
             

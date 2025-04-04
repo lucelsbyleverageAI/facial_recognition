@@ -9,6 +9,8 @@ DROP TABLE IF EXISTS cards CASCADE;
 DROP TABLE IF EXISTS consent_faces CASCADE;
 DROP TABLE IF EXISTS consent_profiles CASCADE;
 DROP TABLE IF EXISTS projects CASCADE;
+DROP TABLE IF EXISTS processing_tasks CASCADE;
+DROP TABLE IF EXISTS processing_tasks CASCADE;
 
 -- Create projects table
 CREATE TABLE projects (
@@ -42,7 +44,7 @@ CREATE TABLE cards (
     card_name TEXT NOT NULL,
     description TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    status TEXT CHECK (status IN ('pending', 'paused', 'processing', 'complete'))
+    status TEXT CHECK (status IN ('pending', 'paused', 'generating_embeddings', 'processing', 'complete', 'error'))
 );
 
 -- Create card_configs table
@@ -137,6 +139,18 @@ CREATE TABLE face_matches (
     source_h INTEGER NOT NULL
 );
 
+-- Create processing_tasks table
+CREATE TABLE processing_tasks (
+    task_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    card_id UUID NOT NULL REFERENCES cards(card_id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'generating_embeddings', 'extracting_frames', 'processing_clips', 'complete', 'error', 'cancelling', 'cancelled')) DEFAULT 'pending',
+    stage TEXT,
+    progress NUMERIC CHECK (progress >= 0 AND progress <= 1) DEFAULT 0,
+    message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Create indexes for performance
 CREATE INDEX idx_card_project_id ON cards(project_id);
 CREATE INDEX idx_card_config_card_id ON card_configs(card_id);
@@ -149,6 +163,8 @@ CREATE INDEX idx_face_match_detection_id ON face_matches(detection_id);
 CREATE INDEX idx_face_match_consent_face_id ON face_matches(consent_face_id);
 CREATE INDEX idx_consent_face_profile_id ON consent_faces(profile_id);
 CREATE INDEX idx_consent_profile_project_id ON consent_profiles(project_id);
+CREATE INDEX idx_processing_tasks_card_id ON processing_tasks(card_id);
+CREATE INDEX idx_processing_tasks_status ON processing_tasks(status);
 
 -- Drop existing function if it exists
 DROP FUNCTION IF EXISTS create_default_card_config() CASCADE;
@@ -180,3 +196,4 @@ DROP TRIGGER IF EXISTS trigger_create_card_config ON cards;
 CREATE TRIGGER trigger_create_card_config
 AFTER INSERT ON cards
 FOR EACH ROW EXECUTE FUNCTION create_default_card_config();
+

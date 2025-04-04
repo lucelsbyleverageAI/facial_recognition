@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,11 @@ import { CardConfigModal } from './CardConfigModal';
 import { ClipsList } from './ClipsList';
 import { AddWatchFolderModal } from './AddWatchFolderModal';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { scanWatchFolder, startWatchFolderMonitoring, stopWatchFolderMonitoring } from '@/lib/api';
+import { scanWatchFolder, startWatchFolderMonitoring, stopWatchFolderMonitoring, startProcessing, stopProcessing } from '@/lib/api';
+import { Card as CardType } from '@/types';
+import { useMutation, useQuery, useSubscription } from '@apollo/client';
+import { GET_CARD_BY_ID, CARD_STATUS_SUBSCRIPTION } from '@/lib/graphql/queries';
+import { formatStatus } from '@/lib/utils';
 
 interface ProcessingDashboardTabProps {
   projectId: string;
@@ -24,6 +28,9 @@ interface ProcessingDashboardTabProps {
 // Update the type definition of the watch folder status
 type WatchFolderStatus = 'idle' | 'scanned' | 'active' | 'error';
 
+// Define all possible card statuses
+type CardStatus = 'pending' | 'paused' | 'processing' | 'complete' | 'generating_embeddings';
+
 export default function ProcessingDashboardTab({ projectId, cardId }: ProcessingDashboardTabProps) {
   const { toast } = useToast();
   const [configModalOpen, setConfigModalOpen] = useState(false);
@@ -31,6 +38,9 @@ export default function ProcessingDashboardTab({ projectId, cardId }: Processing
   const [folderToDelete, setFolderToDelete] = useState<string | null>(null);
   const [scanningFolders, setScanningFolders] = useState<Set<string>>(new Set());
   const [monitoringFolders, setMonitoringFolders] = useState<Set<string>>(new Set());
+  const [processingTask, setProcessingTask] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingError, setProcessingError] = useState<string | null>(null);
 
   const { 
     cardConfig, 
@@ -39,6 +49,18 @@ export default function ProcessingDashboardTab({ projectId, cardId }: Processing
     updating: configUpdating,
     refetch: refetchCardConfig
   } = useCardConfig(cardId);
+
+  const { data: cardSubscriptionData } = useSubscription(CARD_STATUS_SUBSCRIPTION, {
+    variables: { cardId },
+    skip: !cardId,
+  });
+
+  const { data: cardData, loading: cardLoading, refetch: refetchCard } = useQuery(GET_CARD_BY_ID, {
+    variables: { cardId },
+    skip: !cardId,
+  });
+
+  const card = cardSubscriptionData?.cards_by_pk || cardData?.cards_by_pk as CardType | null;
 
   const {
     addFolder,
@@ -214,6 +236,95 @@ export default function ProcessingDashboardTab({ projectId, cardId }: Processing
     }
   };
 
+  // Handle starting processing
+  const handleStartProcessing = async () => {
+    try {
+      setIsProcessing(true);
+      setProcessingError(null);
+      
+      // Optimistically update UI state to show processing has started
+      // This gives immediate feedback to the user before the backend responds
+      toast({
+        title: "Processing Started",
+        description: "Starting processing task...",
+        duration: 3000,
+      });
+      
+      const result = await startProcessing(cardId);
+      
+      setProcessingTask(result.task_id);
+      
+      toast({
+        title: "Processing Task Created",
+        description: `Processing started for ${result.clips_count} clips.`,
+        duration: 3000,
+      });
+      
+      // Refresh data after a short delay to show updated status
+      setTimeout(() => {
+        refetchCardConfig();
+        refetchCard();
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Error starting processing:', error);
+      setProcessingError(error instanceof Error ? error.message : "Failed to start processing.");
+      
+      toast({
+        title: "Processing Failed",
+        description: error instanceof Error ? error.message : "Failed to start processing.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+  
+  // Handle stopping processing
+  const handleStopProcessing = async () => {
+    if (!processingTask) {
+      toast({
+        title: "No Active Task",
+        description: "There is no active processing task to stop.",
+        variant: "destructive",
+        duration: 3000,
+      });
+      return;
+    }
+    
+    try {
+      setIsProcessing(true);
+      
+      const result = await stopProcessing(processingTask);
+      
+      setProcessingTask(null);
+      
+      toast({
+        title: "Processing Stopped",
+        description: result.message,
+        duration: 3000,
+      });
+      
+      // Refresh data after a short delay to show updated status
+      setTimeout(() => {
+        refetchCardConfig();
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Error stopping processing:', error);
+      
+      toast({
+        title: "Stop Processing Failed",
+        description: error instanceof Error ? error.message : "Failed to stop processing.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const isScanning = (watchFolderId: string) => scanningFolders.has(watchFolderId);
   const isChangingMonitorState = (watchFolderId: string) => monitoringFolders.has(watchFolderId);
 
@@ -232,6 +343,10 @@ export default function ProcessingDashboardTab({ projectId, cardId }: Processing
         return null;
     }
   };
+
+  // Determine if the card is being processed based on its status
+  const isCardProcessing = card && 
+    (card.status === 'processing' || card.status === 'generating_embeddings' as any);
 
   return (
     <div className="space-y-6">
@@ -436,16 +551,61 @@ export default function ProcessingDashboardTab({ projectId, cardId }: Processing
         <Button 
           variant="default" 
           className="gap-1" 
-          disabled={!cardConfig?.watch_folders?.length || clips.length === 0}
+          disabled={!cardConfig?.watch_folders?.length || clips.length === 0 || isProcessing || Boolean(isCardProcessing)}
+          onClick={handleStartProcessing}
         >
-          <Play className="h-4 w-4" />
-          <span>Start Processing</span>
+          {isProcessing ? (
+            <>
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span>Starting...</span>
+            </>
+          ) : (
+            <>
+              <Play className="h-4 w-4" />
+              <span>Start Processing</span>
+            </>
+          )}
         </Button>
-        <Button variant="outline" className="gap-1" disabled>
-          <Square className="h-4 w-4" />
-          <span>Stop Processing</span>
+        
+        <Button 
+          variant="outline" 
+          className="gap-1" 
+          disabled={!isCardProcessing || isProcessing}
+          onClick={handleStopProcessing}
+        >
+          {isProcessing ? (
+            <>
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span>Stopping...</span>
+            </>
+          ) : (
+            <>
+              <Square className="h-4 w-4" />
+              <span>Stop Processing</span>
+            </>
+          )}
         </Button>
       </div>
+
+      {/* Display Card Status with improved formatting */}
+      {card && (
+        <div className="text-sm text-center mt-2">
+          <span className="text-muted-foreground">Card Status: </span>
+          <Badge variant={
+            isCardProcessing ? "default" : 
+            card.status === 'complete' ? "secondary" : "outline"
+          }>
+            {formatStatus(card.status)}
+          </Badge>
+        </div>
+      )}
+      
+      {/* Display error if any */}
+      {processingError && (
+        <div className="mt-2 text-sm text-destructive text-center">
+          Error: {processingError}
+        </div>
+      )}
     </div>
   );
 } 

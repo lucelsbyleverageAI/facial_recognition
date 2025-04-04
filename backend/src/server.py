@@ -1,17 +1,26 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
 import time
-from fastapi import Request
 import asyncio
+
+# Load environment variables FIRST, before other src imports
+from src.utils.env_loader import load_environment_variables
+environment_loaded = load_environment_variables()
+if not environment_loaded:
+    # Log a warning, but allow the app to continue starting
+    # It might fail later if components strictly need the env vars
+    logging.warning("Application starting with potentially missing environment variables")
+
+# Now import other modules that might depend on env vars
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.api import scan_consent_folders  # Changed from get_projects to scan_consent_folders
 from src.api import images  # Add the new images router
 from src.api import scan_watch_folder  # Import the new scan_watch_folder router
 from src.api import watch_folder_monitor  # Import the new watch folder monitoring API
-from src.services.watch_folder_monitor import cleanup_monitors  # Import the cleanup function
-from src.utils.env_loader import load_environment_variables
+from src.api import processing # Import processing API
+from src.services.watch_folder_monitor import cleanup_monitors  # Import the cleanup function for watch folders
 
 # Configure logging
 logging.basicConfig(
@@ -23,11 +32,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-environment_loaded = load_environment_variables()
-if not environment_loaded:
-    logger.warning("Application starting with missing environment variables")
-
 app = FastAPI(
     title="Facial Recognition API",
     description="API for facial recognition services",
@@ -38,13 +42,21 @@ app = FastAPI(
 @app.on_event("startup")
 async def startup_event():
     logger.info("Application starting up")
+    # Create output directories for frame extraction
+    try:
+        os.makedirs("outputs/extracted_frames", exist_ok=True)
+        logger.info("Created output directories for frame extraction")
+    except Exception as e:
+        logger.error(f"Failed to create output directories: {str(e)}")
 
 # Register a shutdown event to cleanup resources, especially active monitors
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Application shutting down, cleaning up resources")
     try:
-        await cleanup_monitors()
+        await cleanup_monitors() # Keep watch folder cleanup
+        logger.info("Cleaned up watch folder monitors")
+
     except Exception as e:
         logger.exception(f"Error during cleanup: {str(e)}")
 
@@ -62,6 +74,7 @@ app.include_router(scan_consent_folders.router)
 app.include_router(images.router)  # Include the images router
 app.include_router(scan_watch_folder.router)  # Include the new scan_watch_folder router
 app.include_router(watch_folder_monitor.router)  # Include the new watch folder monitoring router
+app.include_router(processing.router)  # Include the processing router
 
 @app.get("/")
 async def root():

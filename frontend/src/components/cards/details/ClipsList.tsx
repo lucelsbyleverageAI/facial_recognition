@@ -36,6 +36,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { formatStatus } from '@/lib/utils';
 
 interface ClipsListProps {
   clips: Clip[];
@@ -236,9 +237,9 @@ export function ClipsList({ clips, loading, onLoadMore, totalCount, refetch }: C
     }
   };
 
+  // Get formatted status text for displaying
   const getStatusText = (status: string) => {
-    const statusItem = statusOrder.find(item => item.key === status);
-    return statusItem ? statusItem.label : status.charAt(0).toUpperCase() + status.slice(1);
+    return formatStatus(status);
   };
 
   return (

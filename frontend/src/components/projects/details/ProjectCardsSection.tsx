@@ -15,6 +15,7 @@ import { GET_CARDS_BY_PROJECT } from '@/lib/graphql/queries';
 import { Card as ProjectCard } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AddNewCardModal } from './AddNewCardModal';
+import { formatStatus } from '@/lib/utils';
 
 interface ProjectCardsSectionProps {
   projectId: string;
@@ -79,15 +80,17 @@ const getColumns = (copyId: string | null, onCopy: (id: string) => void, project
     cell: ({ row }: { row: any }) => {
       const status = row.original.status;
       let variant: "default" | "secondary" | "outline" | "destructive" = 'secondary';
-      let text = 'Pending';
+      
       switch (status) {
-        case 'complete': variant = 'default'; text = 'Completed'; break;
-        case 'processing': variant = 'secondary'; text = 'Processing'; break;
-        case 'paused': variant = 'outline'; text = 'Paused'; break;
-        case 'error': variant = 'destructive'; text = 'Error'; break;
-        case 'pending': variant = 'secondary'; text = 'Pending'; break;
+        case 'complete': variant = 'default'; break;
+        case 'processing': variant = 'secondary'; break; 
+        case 'generating_embeddings': variant = 'secondary'; break;
+        case 'paused': variant = 'outline'; break;
+        case 'error': variant = 'destructive'; break;
+        case 'pending': variant = 'secondary'; break;
       }
-      return <Badge variant={variant}>{text}</Badge>;
+      
+      return <Badge variant={variant}>{formatStatus(status)}</Badge>;
     },
   },
   {

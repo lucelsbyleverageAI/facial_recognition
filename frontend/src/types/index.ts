@@ -26,7 +26,7 @@ export interface Card {
   card_name: string;
   description?: string;
   created_at: string;
-  status: 'pending' | 'paused' | 'processing' | 'complete';
+  status: 'pending' | 'paused' | 'processing' | 'complete' | 'generating_embeddings';
 }
 
 export interface CardConfig {

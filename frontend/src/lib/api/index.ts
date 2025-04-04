@@ -104,4 +104,67 @@ export const stopWatchFolderMonitoring = async (
   return response.data;
 };
 
+/**
+ * Start processing a card (embedding generation, clip processing, etc.)
+ * @param cardId The ID of the card to process
+ * @param config Optional configuration overrides
+ * @returns Result of the processing operation
+ */
+export interface StartProcessingResponse {
+  task_id: string;
+  status: string;
+  message: string;
+  clips_count: number;
+}
+
+export const startProcessing = async (
+  cardId: string,
+  config?: Record<string, any>
+): Promise<StartProcessingResponse> => {
+  const response = await api.post('/start-processing', {
+    card_id: cardId,
+    config
+  });
+  return response.data;
+};
+
+/**
+ * Stop an active processing task
+ * @param taskId The ID of the task to stop
+ * @returns Result of the stop operation
+ */
+export interface StopProcessingResponse {
+  status: string;
+  message: string;
+}
+
+export const stopProcessing = async (
+  taskId: string
+): Promise<StopProcessingResponse> => {
+  const response = await api.post('/stop-processing', {
+    task_id: taskId
+  });
+  return response.data;
+};
+
+/**
+ * Get a list of all processing tasks (for debugging/monitoring)
+ * @returns List of tasks with their status
+ */
+export interface ProcessingTask {
+  task_id: string;
+  card_id: string;
+  status: string;
+  started_at: string;
+  updated_at: string;
+  progress: number;
+  stage: string;
+  message?: string;
+}
+
+export const getProcessingTasks = async (): Promise<ProcessingTask[]> => {
+  const response = await api.get('/processing-tasks');
+  return response.data;
+};
+
 export default api; 

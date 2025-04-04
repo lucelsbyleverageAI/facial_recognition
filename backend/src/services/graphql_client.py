@@ -2,11 +2,13 @@ import os
 import logging
 import aiohttp
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 from gql.transport.aiohttp import AIOHTTPTransport
 from src.config import ENV
+from datetime import datetime
+from src.utils.datetime_utils import format_for_database
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -268,4 +270,148 @@ class GraphQLClient:
         except Exception as e:
             error_msg = f"Unexpected error during GraphQL request: {str(e)}"
             logger.error(error_msg)
-            raise GraphQLClientError(error_msg) from e 
+            raise GraphQLClientError(error_msg) from e
+
+    # --- Database Task Management Functions ---
+
+    async def create_db_task(self, card_id: str) -> Optional[str]:
+        """Creates a new task record in the processing_tasks table."""
+        mutation = """
+        mutation InsertTask($card_id: uuid!) {
+            insert_processing_tasks_one(object: {card_id: $card_id, status: "pending"}) {
+                task_id
+            }
+        }
+        """
+        variables = {"card_id": card_id}
+        try:
+            result = await self.execute_async(mutation, variables)
+            task_id = result.get("insert_processing_tasks_one", {}).get("task_id")
+            if task_id:
+                logger.info(f"Created DB task record {task_id} for card {card_id}")
+                return task_id
+            else:
+                logger.error(f"Failed to create DB task record for card {card_id}")
+                return None
+        except GraphQLClientError as e:
+            logger.error(f"Error creating DB task for card {card_id}: {e}")
+            return None
+
+    async def update_db_task(self, task_id: str, status: Optional[str] = None,
+                             stage: Optional[str] = None, progress: Optional[float] = None,
+                             message: Optional[str] = None) -> bool:
+        """Updates an existing task record in the processing_tasks table."""
+        mutation = """
+        mutation UpdateTask($task_id: uuid!, $updates: processing_tasks_set_input!) {
+            update_processing_tasks_by_pk(pk_columns: {task_id: $task_id}, _set: $updates) {
+                task_id
+            }
+        }
+        """
+        updates_payload = {
+            "updated_at": format_for_database(datetime.now()) # Always update timestamp
+        }
+        if status is not None:
+            updates_payload["status"] = status
+        if stage is not None:
+            updates_payload["stage"] = stage
+        if progress is not None:
+            updates_payload["progress"] = progress
+        if message is not None:
+            updates_payload["message"] = message
+
+        variables = {
+            "task_id": task_id,
+            "updates": updates_payload
+        }
+        try:
+            result = await self.execute_async(mutation, variables)
+            updated_id = result.get("update_processing_tasks_by_pk", {}).get("task_id")
+            if updated_id:
+                logger.debug(f"Updated DB task {task_id}: status={status}, stage={stage}, progress={progress}")
+                return True
+            else:
+                logger.warning(f"Failed to update DB task {task_id} - task might not exist.")
+                return False
+        except GraphQLClientError as e:
+            logger.error(f"Error updating DB task {task_id}: {e}")
+            return False
+
+    async def get_db_task_status(self, task_id: str) -> Optional[str]:
+        """Gets the status of a task from the DB."""
+        query = """
+        query GetTaskStatus($task_id: uuid!) {
+            processing_tasks_by_pk(task_id: $task_id) {
+                status
+            }
+        }
+        """
+        variables = {"task_id": task_id}
+        try:
+            result = await self.execute_async(query, variables)
+            task_data = result.get("processing_tasks_by_pk")
+            if task_data:
+                return task_data.get("status")
+            else:
+                logger.warning(f"Could not find task {task_id} in DB to get status.")
+                return None
+        except GraphQLClientError as e:
+            logger.error(f"Error getting status for DB task {task_id}: {e}")
+            return None
+
+    async def get_active_db_task_for_card(self, card_id: str) -> Optional[Dict[str, Any]]:
+        """Gets the active (non-terminal status) task for a given card_id."""
+        query = """
+        query GetActiveTaskForCard($card_id: uuid!) {
+            processing_tasks(
+                where: {
+                    card_id: {_eq: $card_id},
+                    status: {_nin: ["complete", "error", "cancelled"]}
+                },
+                limit: 1,
+                order_by: {created_at: desc}
+            ) {
+                task_id
+                status
+                stage
+                progress
+                message
+                created_at
+                updated_at
+            }
+        }
+        """
+        variables = {"card_id": card_id}
+        try:
+            result = await self.execute_async(query, variables)
+            tasks = result.get("processing_tasks")
+            if tasks:
+                return tasks[0]
+            else:
+                return None
+        except GraphQLClientError as e:
+            logger.error(f"Error getting active DB task for card {card_id}: {e}")
+            return None
+
+    async def get_all_db_tasks(self) -> List[Dict[str, Any]]:
+        """Gets all task records from the DB."""
+        query = """
+        query GetAllTasks {
+            processing_tasks(order_by: {created_at: desc}) {
+                task_id
+                card_id
+                status
+                stage
+                progress
+                message
+                created_at
+                updated_at
+            }
+        }
+        """
+        try:
+            result = await self.execute_async(query)
+            return result.get("processing_tasks", [])
+        except GraphQLClientError as e:
+            logger.error(f"Error getting all DB tasks: {e}")
+            return [] 

@@ -198,4 +198,31 @@ export const DELETE_CLIP = gql`
       clip_id
     }
   }
+`;
+
+export const GET_CARD_BY_ID = gql`
+  query GetCardById($cardId: uuid!) {
+    cards_by_pk(card_id: $cardId) {
+      card_id
+      card_name
+      description
+      status
+      created_at
+      project_id
+    }
+  }
+`;
+
+// Subscription for card status updates
+export const CARD_STATUS_SUBSCRIPTION = gql`
+  subscription WatchCardStatus($cardId: uuid!) {
+    cards_by_pk(card_id: $cardId) {
+      card_id
+      card_name
+      description
+      status
+      created_at
+      project_id
+    }
+  }
 `; 
