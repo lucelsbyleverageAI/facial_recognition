@@ -23,7 +23,7 @@ HASURA_URL = os.getenv("HASURA_GRAPHQL_URL", "http://localhost:8080/v1/graphql")
 HASURA_ADMIN_SECRET = os.getenv("HASURA_ADMIN_SECRET")
 
 # --- FastAPI Router Setup ---
-router = APIRouter()
+router = APIRouter(prefix="/api", tags=["reports"])
 
 # Adjust template path relative to this file's location (src/api/reports.py)
 # Goes up three levels (api -> src -> backend) then into templates
