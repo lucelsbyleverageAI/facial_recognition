@@ -64,7 +64,7 @@ Hasura is a tool for managing the database. It's managed using Docker Compose.
 2. For development, navigate to the hasura directory and start the console using Hasura CLI:
    ```bash
    cd hasura
-   & "C:\hasura\hasura.exe" console 
+   "C:\hasura\hasura.exe" console 
    or
    hasura console
    ```

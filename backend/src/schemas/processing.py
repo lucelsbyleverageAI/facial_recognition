@@ -13,7 +13,7 @@ class StartProcessingResponse(BaseModel):
     task_id: str = Field(..., description="Unique identifier for the task")
     status: str = Field(..., description="Status of the operation")
     message: str = Field(..., description="Description of the result")
-    clips_count: int = Field(0, description="Number of clips queued for processing")
+    total_items_count: int = Field(0, description="Total number of items to process (clips, frames, faces)", alias="clips_count")
 
 class StopProcessingRequest(BaseModel):
     """Request model for stopping processing"""

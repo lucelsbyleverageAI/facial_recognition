@@ -51,13 +51,14 @@ async def start_processing(
             task_id = active_task['task_id']
             status = active_task['status']
             logger.info(f"Active processing task {task_id} (status: {status}) already exists for card {card_id}. Returning existing task.")
-            # Get clip count for response consistency
-            clips_count = await processing_service.get_queued_clips_count(card_id)
+            # Get work counts for response consistency
+            status = await processing_service.get_processing_status(card_id)
+            total_items = status['total_items']
             return StartProcessingResponse(
                 task_id=task_id,
                 status=status,
                 message=f"Active processing task {task_id} already exists for card {card_id}",
-                clips_count=clips_count
+                clips_count=total_items
             )
 
         # 2. Get card configuration
@@ -80,14 +81,21 @@ async def start_processing(
         config.setdefault("fallback_frame_rate", 6)
         config.setdefault("use_eq", True)
 
-        # 3. Get count of clips to process
-        clips_count = await processing_service.get_queued_clips_count(card_id)
-        if clips_count == 0:
-            logger.warning(f"No queued clips found for card {card_id}. Cannot start processing.")
+        # 3. Get counts of work at all levels
+        status = await processing_service.get_processing_status(card_id)
+        clips_count = status['queued_clips']
+        frames_count = status['unprocessed_frames']
+        faces_count = status['unmatched_faces']
+        total_items = status['total_items']
+        
+        logger.info(f"Card {card_id} has {clips_count} queued clips, {frames_count} unprocessed frames, {faces_count} unmatched faces")
+        
+        if total_items == 0:
+            logger.warning(f"No work found for card {card_id}. Cannot start processing.")
             return StartProcessingResponse(
-                task_id="none", # Or perhaps null/empty UUID?
-                status="no_clips",
-                message=f"No queued clips to process for card {card_id}",
+                task_id="none",
+                status="no_work",
+                message=f"No unprocessed items to process for card {card_id}",
                 clips_count=0
             )
 
@@ -113,12 +121,22 @@ async def start_processing(
 
         logger.info(f"Scheduled background task {task_id} for card {card_id} using process_card")
 
-        # 7. Return the new task ID
+        # 7. Return the new task ID with work summary
+        work_types = []
+        if clips_count > 0:
+            work_types.append(f"{clips_count} clips")
+        if frames_count > 0:
+            work_types.append(f"{frames_count} frames")
+        if faces_count > 0:
+            work_types.append(f"{faces_count} faces")
+            
+        work_summary = ", ".join(work_types)
+        
         return StartProcessingResponse(
             task_id=task_id,
             status="pending", # Initial status in DB is 'pending'
-            message=f"Started processing for card {card_id}",
-            clips_count=clips_count
+            message=f"Started processing for card {card_id} ({work_summary})",
+            clips_count=total_items
         )
 
     except HTTPException as http_exc:

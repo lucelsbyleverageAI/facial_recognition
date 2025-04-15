@@ -6,6 +6,7 @@ import numpy as np
 
 from src.services.graphql_client import GraphQLClient
 from src.services.frame_extraction_service import FrameExtractionService
+from src.services.frame_analysis_service import FrameAnalysisService
 from src.utils.recognition_utils import find_bulk_embeddings
 
 logger = logging.getLogger(__name__)
@@ -395,12 +396,161 @@ class ProcessingService:
             logger.error(f"Error fetching queued clips count: {str(e)}")
             return 0
 
+    async def get_unprocessed_frames_count(self, card_id: str) -> int:
+        """
+        Get count of frames for a card that are in 'queued' or 'detecting_faces' status
+        
+        Args:
+            card_id: ID of the card
+            
+        Returns:
+            Count of unprocessed frames
+        """
+        query = """
+        query GetUnprocessedFramesCount($card_id: uuid!) {
+            frames_aggregate(
+                where: {
+                    clip: {card_id: {_eq: $card_id}},
+                    status: {_in: ["queued", "detecting_faces"]}
+                }
+            ) {
+                aggregate {
+                    count
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "card_id": card_id
+        }
+        
+        try:
+            result = await self.graphql_client.execute_async(query, variables)
+            return result.get("frames_aggregate", {}).get("aggregate", {}).get("count", 0)
+        except Exception as e:
+            logger.error(f"Error fetching unprocessed frames count: {str(e)}")
+            return 0
+            
+    async def get_unmatched_faces_count(self, card_id: str) -> int:
+        """
+        Get count of detected faces for a card that are in 'queued' or 'matching_faces' status
+        
+        Args:
+            card_id: ID of the card
+            
+        Returns:
+            Count of unmatched faces
+        """
+        query = """
+        query GetUnmatchedFacesCount($card_id: uuid!) {
+            detected_faces_aggregate(
+                where: {
+                    frame: {clip: {card_id: {_eq: $card_id}}},
+                    status: {_in: ["queued", "matching_faces"]}
+                }
+            ) {
+                aggregate {
+                    count
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "card_id": card_id
+        }
+        
+        try:
+            result = await self.graphql_client.execute_async(query, variables)
+            return result.get("detected_faces_aggregate", {}).get("aggregate", {}).get("count", 0)
+        except Exception as e:
+            logger.error(f"Error fetching unmatched faces count: {str(e)}")
+            return 0
+            
+    async def get_processing_status(self, card_id: str) -> Dict[str, int]:
+        """
+        Get comprehensive status of processing for a card, with counts at all stages
+        
+        Args:
+            card_id: ID of the card
+            
+        Returns:
+            Dictionary with counts of queued items at each stage
+        """
+        clips_count = await self.get_queued_clips_count(card_id)
+        frames_count = await self.get_unprocessed_frames_count(card_id)
+        faces_count = await self.get_unmatched_faces_count(card_id)
+        
+        return {
+            "queued_clips": clips_count,
+            "unprocessed_frames": frames_count,
+            "unmatched_faces": faces_count,
+            "total_items": clips_count + frames_count + faces_count
+        }
+
+    async def get_consent_embeddings_cache(self, project_id: str) -> Dict[str, Any]:
+        """
+        Get all consent face embeddings for a project and structure them for quick matching
+        
+        Args:
+            project_id: ID of the project
+            
+        Returns:
+            Dictionary with profiles and their face embeddings
+        """
+        query = """
+        query GetConsentProfilesWithEmbeddings($project_id: uuid!) {
+            consent_profiles(where: {project_id: {_eq: $project_id}}) {
+                profile_id
+                person_name
+                consent_faces {
+                    consent_face_id
+                    face_image_path
+                    face_embedding
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "project_id": project_id
+        }
+        
+        try:
+            result = await self.graphql_client.execute_async(query, variables)
+            
+            if not result or "consent_profiles" not in result:
+                logger.warning(f"No consent profiles found for project: {project_id}")
+                return {"profiles": []}
+            
+            # Format the data for efficient matching
+            profiles = []
+            for profile in result["consent_profiles"]:
+                faces = []
+                for face in profile.get("consent_faces", []):
+                    faces.append({
+                        "consent_face_id": face["consent_face_id"],
+                        "embedding": face["face_embedding"]
+                    })
+                
+                profiles.append({
+                    "profile_id": profile["profile_id"],
+                    "person_name": profile["person_name"],
+                    "faces": faces
+                })
+            
+            return {"profiles": profiles}
+            
+        except Exception as e:
+            logger.error(f"Error getting consent embeddings: {str(e)}")
+            return {"profiles": []}
+
     async def process_card(self, task_id: str, card_id: str, config: Dict[str, Any]) -> bool:
         """
-        Process a card, including:
-        1. Generate embeddings for consent faces if needed
-        2. Extract frames from clips if needed
-        3. Process frames to detect and match faces
+        Process a card with continuous work discovery and processing.
+        Checks for work at all levels (clips, frames, faces) and processes them
+        until no more work is found.
         
         Args:
             task_id: The ID of the task record in the database.
@@ -414,78 +564,266 @@ class ProcessingService:
         overall_success = True
 
         try:
-            # 1. Generate Consent Embeddings (if needed)
+            # 1. Generate Consent Embeddings (prerequisite for matching)
             logger.info(f"Step 1: Generating consent embeddings for card {card_id}, task {task_id}")
             embeddings_success = await self.generate_consent_embeddings(task_id, card_id, config)
             if not embeddings_success:
-                # Error status already set within generate_consent_embeddings
-                logger.error(f"Failed to generate consent embeddings for card {card_id}, task {task_id}")
+                logger.error(f"Failed to generate consent embeddings for card {card_id}")
                 await self.update_card_status(card_id, "error")
-                return False # Treat this as a critical failure
-
+                return False
+                
             # Check for cancellation after embedding generation
-            if await self._check_for_cancellation(task_id): return False
-
-            # 2. Process Clips
-            logger.info(f"Step 2: Processing clips for card {card_id}, task {task_id}")
-            await self.graphql_client.update_db_task(task_id, status="processing_clips", stage="Processing Clips", progress=0.0) # Reset progress for clip stage
-            await self.update_card_status(card_id, "processing") # General processing status
-
-            clips_to_process = await self.get_queued_clips(card_id)
-            total_clips = len(clips_to_process)
-            processed_clips = 0
-            failed_clips = 0
-
-            if not clips_to_process:
-                logger.warning(f"No queued clips found for card {card_id}. Skipping clip processing.")
-            else:
-                frame_extraction_service = FrameExtractionService(self.graphql_client)
-                for i, clip in enumerate(clips_to_process):
-                    clip_id = clip['clip_id']
-                    clip_filename = clip['filename']
-                    logger.info(f"Processing clip {i+1}/{total_clips}: {clip_id} ({clip_filename}) for task {task_id}")
-
-                    # Check for cancellation before processing each clip
-                    if await self._check_for_cancellation(task_id): return False
-
-                    try:
-                        # TODO: Add actual clip processing logic here (frame extraction, detection, recognition)
-                        clip_success = await frame_extraction_service.process_clip(clip_id, config)
-
-                        if clip_success:
-                            logger.info(f"Successfully processed clip {clip_id}")
-                            processed_clips += 1
-                            # TODO: Update clip status to 'processing_complete' or similar via service call
-                            await frame_extraction_service.update_clip_status(clip_id, "extraction_complete") # Example
-                        else:
-                            logger.warning(f"Failed to process clip {clip_id}")
+            if await self._check_for_cancellation(task_id): 
+                return False
+                
+            # Get project ID for embeddings cache (needed for face matching)
+            project_id = await self._get_project_id_for_card(card_id)
+            if not project_id:
+                logger.error(f"Could not find project ID for card {card_id}")
+                await self.graphql_client.update_db_task(task_id, status="error", message="Could not find project ID")
+                await self.update_card_status(card_id, "error")
+                return False
+                
+            # Initialize service instances
+            frame_extraction_service = FrameExtractionService(self.graphql_client)
+            frame_analysis_service = FrameAnalysisService(self.graphql_client)
+            
+            # 2. Process in a continuous loop until all work is complete
+            processing_complete = False
+            iteration = 0
+            max_iterations = 20  # Prevent infinite loops
+            
+            await self.update_card_status(card_id, "processing")
+            
+            while not processing_complete and iteration < max_iterations:
+                iteration += 1
+                logger.info(f"Starting iteration {iteration} for card {card_id}, task {task_id}")
+                
+                # Check for cancellation at start of each iteration
+                if await self._check_for_cancellation(task_id): 
+                    return False
+                    
+                # Get current work status
+                status = await self.get_processing_status(card_id)
+                logger.info(f"Work status: {status['queued_clips']} clips, {status['unprocessed_frames']} frames, {status['unmatched_faces']} faces")
+                
+                # Track if any work was done in this iteration
+                work_done = False
+                
+                # 2.1 Process queued clips
+                if status['queued_clips'] > 0:
+                    logger.info(f"Processing {status['queued_clips']} queued clips")
+                    await self.graphql_client.update_db_task(
+                        task_id, 
+                        status="processing_clips", 
+                        stage=f"Extracting Frames (Iteration {iteration})",
+                        progress=0.0,
+                        message=f"Processing {status['queued_clips']} queued clips"
+                    )
+                    
+                    clips_to_process = await self.get_queued_clips(card_id)
+                    processed_clips = 0
+                    failed_clips = 0
+                    
+                    for i, clip in enumerate(clips_to_process):
+                        clip_id = clip['clip_id']
+                        clip_filename = clip['filename']
+                        
+                        # Check for cancellation periodically
+                        if i % 3 == 0 and await self._check_for_cancellation(task_id): 
+                            return False
+                            
+                        try:
+                            # Extract frames from the clip
+                            clip_success = await frame_extraction_service.process_clip(clip_id, config)
+                            
+                            if clip_success:
+                                logger.info(f"Successfully processed clip {clip_id}")
+                                processed_clips += 1
+                                await frame_extraction_service.update_clip_status(clip_id, "extraction_complete")
+                            else:
+                                logger.warning(f"Failed to process clip {clip_id}")
+                                failed_clips += 1
+                                
+                        except Exception as clip_error:
+                            logger.exception(f"Error processing clip {clip_id}: {clip_error}")
                             failed_clips += 1
-                            # Status updated to 'error' within frame_extraction_service.process_clip
-
-                    except Exception as clip_error:
-                        logger.exception(f"Unexpected error processing clip {clip_id}: {clip_error}")
-                        failed_clips += 1
-                        await frame_extraction_service.update_clip_status(clip_id, "error", str(clip_error))
-
-                    # Update overall progress in DB
-                    progress = (i + 1) / total_clips
-                    await self.graphql_client.update_db_task(task_id, progress=progress)
-
+                            await frame_extraction_service.update_clip_status(clip_id, "error", str(clip_error))
+                            
+                        # Update progress
+                        progress = (i + 1) / len(clips_to_process)
+                        await self.graphql_client.update_db_task(
+                            task_id, 
+                            progress=progress,
+                            message=f"Processed {i+1}/{len(clips_to_process)} clips. {failed_clips} failures."
+                        )
+                    
+                    if processed_clips > 0:
+                        work_done = True
+                        logger.info(f"Completed processing {processed_clips} clips. {failed_clips} failed.")
+                
+                # 2.2 Process unprocessed frames
+                status = await self.get_processing_status(card_id)  # Refresh status after clip processing
+                if status['unprocessed_frames'] > 0:
+                    logger.info(f"Processing {status['unprocessed_frames']} unprocessed frames")
+                    await self.graphql_client.update_db_task(
+                        task_id, 
+                        status="processing_clips", 
+                        stage=f"Detecting Faces (Iteration {iteration})",
+                        progress=0.0,
+                        message=f"Processing {status['unprocessed_frames']} unprocessed frames"
+                    )
+                    
+                    # Delegate frame processing to FrameAnalysisService
+                    face_detection_success = await frame_analysis_service.process_frames(card_id, task_id, config)
+                    
+                    if face_detection_success:
+                        work_done = True
+                        logger.info(f"Completed face detection for frames")
+                
+                # Check for cancellation between stages
+                if await self._check_for_cancellation(task_id): 
+                    return False
+                
+                # 2.3 Match unmatched faces
+                status = await self.get_processing_status(card_id)  # Refresh status after frame processing
+                if status['unmatched_faces'] > 0:
+                    logger.info(f"Matching {status['unmatched_faces']} unmatched faces")
+                    await self.graphql_client.update_db_task(
+                        task_id, 
+                        status="processing_clips", 
+                        stage=f"Matching Faces (Iteration {iteration})",
+                        progress=0.0,
+                        message=f"Matching {status['unmatched_faces']} unmatched faces"
+                    )
+                    
+                    # Load consent embeddings cache (only once per iteration)
+                    embeddings_cache = await self.get_consent_embeddings_cache(project_id)
+                    
+                    # Delegate face matching to FrameAnalysisService
+                    face_matching_success = await frame_analysis_service.match_faces(
+                        card_id, task_id, config, embeddings_cache
+                    )
+                    
+                    if face_matching_success:
+                        work_done = True
+                        logger.info(f"Completed face matching")
+                
+                # 2.4 Update clip statuses after processing is done
+                await self._update_clip_statuses(card_id)
+                
+                # 2.5 Check if we should terminate the loop
+                if not work_done:
+                    # Recheck work status one final time to be sure
+                    final_status = await self.get_processing_status(card_id)
+                    if final_status['total_items'] == 0:
+                        logger.info(f"No more work to do for card {card_id}, processing complete")
+                        processing_complete = True
+                    else:
+                        logger.info(f"No work done in iteration {iteration} but found {final_status['total_items']} items, continuing")
+                        # Sleep briefly to prevent tight loop if there's a persistent issue
+                        await asyncio.sleep(1)
+                else:
+                    logger.info(f"Work done in iteration {iteration}, checking for more work")
+            
+            # Check if max iterations was reached
+            if iteration >= max_iterations and not processing_complete:
+                logger.warning(f"Reached maximum iterations ({max_iterations}) for card {card_id}")
+                final_status = await self.get_processing_status(card_id)
+                if final_status['total_items'] > 0:
+                    logger.warning(f"Processing stopped with {final_status['total_items']} items still pending")
+                    overall_success = False
+            
             # 3. Finalize
-            final_message = f"Processing complete. {processed_clips}/{total_clips} clips processed successfully."
-            if failed_clips > 0:
-                final_message += f" {failed_clips} clips failed."
-                overall_success = False # Indicate partial failure if clips failed
-
+            final_message = f"Processing complete after {iteration} iterations."
+            if not overall_success:
+                final_message += " Some items may not have been processed completely."
+                
             logger.info(f"Finalizing processing for card {card_id}, task {task_id}. {final_message}")
-            await self.graphql_client.update_db_task(task_id, status="complete", stage="Complete", progress=1.0, message=final_message)
+            await self.graphql_client.update_db_task(
+                task_id, 
+                status="complete", 
+                stage="Complete", 
+                progress=1.0, 
+                message=final_message
+            )
             await self.update_card_status(card_id, "complete")
-            return True # Return True even if some clips failed, as the card processing itself finished
+            
+            return overall_success
 
         except Exception as e:
             logger.exception(f"Critical error during card processing for card {card_id}, task {task_id}: {e}")
             await self.graphql_client.update_db_task(task_id, status="error", stage="Error", message=f"Critical processing error: {e}")
             await self.update_card_status(card_id, "error")
+            return False
+
+    async def _update_clip_statuses(self, card_id: str) -> bool:
+        """
+        Check if all frames for clips are processed, and if so,
+        update clip status to processing_complete
+        
+        Args:
+            card_id: ID of the card
+            
+        Returns:
+            True if successful
+        """
+        query = """
+        query GetClipsWithCompletedFrames($card_id: uuid!) {
+            clips(
+                where: {
+                    card_id: {_eq: $card_id},
+                    status: {_eq: "extraction_complete"}
+                }
+            ) {
+                clip_id
+                frames_aggregate {
+                    aggregate {
+                        count
+                    }
+                    nodes {
+                        status
+                    }
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "card_id": card_id
+        }
+        
+        try:
+            result = await self.graphql_client.execute_async(query, variables)
+            clips = result.get("clips", [])
+            
+            for clip in clips:
+                clip_id = clip["clip_id"]
+                frames = clip.get("frames_aggregate", {}).get("nodes", [])
+                
+                # Check if all frames are in recognition_complete status
+                all_complete = all(frame["status"] == "recognition_complete" for frame in frames)
+                
+                if all_complete and frames:
+                    # Update clip status to processing_complete
+                    mutation = """
+                    mutation UpdateClipStatus($clip_id: uuid!) {
+                        update_clips_by_pk(
+                            pk_columns: {clip_id: $clip_id},
+                            _set: {status: "processing_complete"}
+                        ) {
+                            clip_id
+                        }
+                    }
+                    """
+                    
+                    await self.graphql_client.execute_async(mutation, {"clip_id": clip_id})
+                    logger.info(f"Updated clip {clip_id} status to processing_complete")
+            
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error updating clip statuses: {str(e)}")
             return False
 
     async def _get_project_id_for_card(self, card_id: str) -> Optional[str]:

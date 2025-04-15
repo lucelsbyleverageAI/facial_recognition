@@ -9,3 +9,11 @@ Test Outputs/
 __pycache__/
 *.py[cod]
 *$py.class
+
+hasura/metadata/
+hasura/migrations/
+hasura/seeds/
+hasura/config.yaml
+
+
+backend/outputs/

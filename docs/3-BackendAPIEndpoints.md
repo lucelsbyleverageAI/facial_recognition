@@ -121,7 +121,6 @@ Starts monitoring a watch folder for new video clips.
 **Request Body:**
 ```json
 {
-  "card_id": "uuid-string",
   "watch_folder_id": "uuid-string",
   "inactivity_timeout_minutes": 30
 }
@@ -132,7 +131,7 @@ Starts monitoring a watch folder for new video clips.
 {
   "status": "success",
   "watch_folder_id": "uuid-string",
-  "monitoring_status": "watching",
+  "monitoring_status": "active",
   "message": "Watch folder monitoring started",
   "inactivity_timeout_minutes": 30
 }
@@ -181,7 +180,7 @@ Starts processing of queued clips.
 {
   "card_id": "uuid-string",
   "config": {
-    "model_name": "FACENET512",
+    "model_name": "Facenet512",
     "detector_backend": "retinaface",
     "enforce_detection": false,
     "align": true,

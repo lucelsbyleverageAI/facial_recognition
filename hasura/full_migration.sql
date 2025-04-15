@@ -109,7 +109,7 @@ CREATE TABLE frames (
     timestamp TEXT NOT NULL, -- Timecode format HH:MM:SS:FF
     raw_frame_image_path TEXT NOT NULL,
     processed_frame_image_path TEXT,
-    status TEXT CHECK (status IN ('queued', 'extraction_complete', 'detecting_faces','detection_complete', 'recognition_complete', 'error'))
+    status TEXT CHECK (status IN ('queued', 'detecting_faces', 'detection_complete', 'recognition_complete', 'error'))
 );
 
 -- Create detected_face table
