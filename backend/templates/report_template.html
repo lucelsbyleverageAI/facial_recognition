@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facial Recognition Report - {{ card_name }}</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; line-height: 1.6; }
+        h1, h2, h3 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        .status-warning { color: orange; font-weight: bold; }
+        .status-ok { color: green; font-weight: bold; }
+        .report-header, .clip-summary, .unmatched-details { margin-bottom: 30px; padding: 15px; border: 1px solid #eee; border-radius: 5px; background-color: #f9f9f9; }
+        .unmatched-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px; }
+        .unmatched-item { text-align: center; border: 1px solid #eee; padding: 10px; background-color: #fff; border-radius: 4px; }
+        .unmatched-item img { max-width: 100%; height: auto; border: 1px solid #ddd; margin-bottom: 5px; }
+        .unmatched-item p { font-size: 0.8em; margin: 2px 0; color: #555; }
+        code { background-color: #eee; padding: 2px 4px; border-radius: 3px; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+    <div class="report-header">
+        <h1>Facial Recognition Results Report</h1>
+        <p><strong>Project:</strong> {{ project_name }}</p>
+        <p><strong>Card:</strong> {{ card_name }} (<code>{{ card_id }}</code>)</p>
+        <p><strong>Date Generated:</strong> {{ generation_date }}</p>
+        <p><strong>Overall Status:</strong>
+            {% if overall_status == 'Review Required' %}
+                <span class="status-warning">⚠️ Review Required: Unmatched faces detected.</span>
+            {% else %}
+                <span class="status-ok">✅ Complete: All detected faces matched or no faces detected.</span>
+            {% endif %}
+        </p>
+    </div>
+
+    <div class="clip-summary">
+        <h2>Clip Summary</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Clip Filename</th>
+                    <th>Total Frames</th>
+                    <th>Frames w/ Unmatched Faces</th>
+                    <th>Frames w/ Only Matched/No Faces</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for clip in clip_summaries %}
+                <tr>
+                    <td>
+                        {% if clip.unmatched_frames_count > 0 %}
+                            <span class="status-warning">⚠️</span>
+                        {% else %}
+                            <span class="status-ok">✅</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ clip.filename }}</td>
+                    <td>{{ clip.total_frames }}</td>
+                    <td>{{ clip.unmatched_frames_count }}</td>
+                    <td>{{ clip.safe_frames_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if overall_status == 'Review Required' %}
+    <div class="unmatched-details">
+        <h2>Details of Unmatched Faces</h2>
+        {% for clip_detail in unmatched_details %}
+            {% if clip_detail.unmatched_faces %}
+                <h3>Clip: {{ clip_detail.filename }}</h3>
+                <div class="unmatched-grid">
+                    {% for face in clip_detail.unmatched_faces %}
+                    <div class="unmatched-item">
+                        <img src="data:image/jpeg;base64,{{ face.cropped_image_base64 }}" alt="Unmatched Face from frame {{ face.frame_id }}">
+                        <p>Frame: <code>{{ face.frame_id_short }}</code></p>
+                        <p>Time: {{ face.timestamp }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+</body>
+</html> 

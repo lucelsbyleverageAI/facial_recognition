@@ -20,6 +20,7 @@ from src.api import images  # Add the new images router
 from src.api import scan_watch_folder  # Import the new scan_watch_folder router
 from src.api import watch_folder_monitor  # Import the new watch folder monitoring API
 from src.api import processing # Import processing API
+from src.api import reports # Import the new reports router
 from src.services.watch_folder_monitor import cleanup_monitors  # Import the cleanup function for watch folders
 
 # Configure logging
@@ -71,10 +72,11 @@ app.add_middleware(
 
 # Include routers
 app.include_router(scan_consent_folders.router)
-app.include_router(images.router)  # Include the images router
-app.include_router(scan_watch_folder.router)  # Include the new scan_watch_folder router
-app.include_router(watch_folder_monitor.router)  # Include the new watch folder monitoring router
-app.include_router(processing.router)  # Include the processing router
+app.include_router(images.router)
+app.include_router(scan_watch_folder.router)
+app.include_router(watch_folder_monitor.router)
+app.include_router(processing.router)
+app.include_router(reports.router)
 
 @app.get("/")
 async def root():
@@ -87,23 +89,29 @@ async def log_requests(request: Request, call_next):
     path = request.url.path
     method = request.method
     
-    print(f"=== Request: {method} {path} ===")
-    logger.debug(f"Received request: {method} {path}")
+    # Avoid logging favicon requests excessively if they occur
+    if path == "/favicon.ico":
+        return await call_next(request)
+
+    logger.info(f"=== Request Start: {method} {path} ===")
     
     try:
         response = await call_next(request)
         process_time = time.time() - start_time
-        logger.debug(f"Request completed: {method} {path} - Status: {response.status_code} - Time: {process_time:.4f}s")
+        logger.info(f"=== Request End: {method} {path} - Status: {response.status_code} - Time: {process_time:.4f}s ===")
         return response
     except Exception as e:
-        logger.exception(f"Error processing request: {method} {path} - {str(e)}")
-        raise
+        logger.exception(f"!!! Error processing request: {method} {path} - {str(e)} !!!")
+        # Re-raise the exception so FastAPI's default error handling catches it
+        raise e
 
 if __name__ == "__main__":
     import uvicorn
+    logger.info("Starting Uvicorn server...")
     uvicorn.run(
-        "server:app",
+        "src.server:app", # Point to the app object within src directory
         host="0.0.0.0",
         port=8000,
-        reload=True  # Enable auto-reload during development
+        reload=True,
+        reload_dirs=["src"] # Watch the src directory for changes
     ) 

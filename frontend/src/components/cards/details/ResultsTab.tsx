@@ -9,6 +9,7 @@ import { ResultsFilters } from "./ResultsFilters";
 import { ResultsTable } from "./ResultsTable";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApolloError } from '@apollo/client';
+import { useToast } from "@/components/ui/use-toast";
 
 interface ResultsTabProps {
   projectId: string;
@@ -17,6 +18,8 @@ interface ResultsTabProps {
 
 export default function ResultsTab({ projectId, cardId }: ResultsTabProps) {
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const { toast } = useToast();
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   const {
     frames,
@@ -69,6 +72,65 @@ export default function ResultsTab({ projectId, cardId }: ResultsTabProps) {
       console.error("Detailed error object:", error);
     }
   }, [error]);
+
+  const handleGenerateReport = async () => {
+    setIsGeneratingReport(true);
+    try {
+      const apiUrlBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
+      const reportUrl = `${apiUrlBase}/cards/${cardId}/report`;
+
+      console.log(`Fetching report from: ${reportUrl}`);
+
+      const response = await fetch(reportUrl);
+
+      if (!response.ok) {
+        let errorDetail = "Failed to generate report.";
+        try {
+            const errorData = await response.json();
+            errorDetail = errorData.detail || errorDetail;
+        } catch (parseError) {
+            errorDetail = response.statusText || errorDetail;
+        }
+        console.error("Report generation failed:", response.status, errorDetail);
+        throw new Error(`Report generation failed: ${response.status} ${errorDetail}`);
+      }
+
+      const disposition = response.headers.get('content-disposition');
+      let filename = 'facial_recognition_report.html';
+      if (disposition && disposition.indexOf('attachment') !== -1) {
+          const filenameRegex = /filename[^;=\n]*=((['"])(.*?)\2|[^;\n]*)/;
+          const matches = filenameRegex.exec(disposition);
+          if (matches != null && matches[3]) { 
+            filename = matches[3];
+          }
+      }
+
+      const blob = await response.blob();
+
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+
+      window.URL.revokeObjectURL(url);
+      a.remove();
+
+      toast({ title: "Report Downloaded", description: filename });
+
+    } catch (err: any) {
+      console.error("Error generating report:", err);
+      toast({
+        title: "Report Generation Failed",
+        description: err.message || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
 
   if (error) {
     let errorMessage = "An error occurred while loading frame results.";
@@ -155,9 +217,18 @@ export default function ResultsTab({ projectId, cardId }: ResultsTabProps) {
   return (
     <div className="space-y-6">
       <div className="flex justify-end space-x-2">
-        <Button variant="outline" size="sm">
-          <FileText className="mr-2 h-4 w-4" />
-          Generate Report
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={handleGenerateReport}
+          disabled={isGeneratingReport}
+        >
+          {isGeneratingReport ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <FileText className="mr-2 h-4 w-4" />
+          )}
+          {isGeneratingReport ? "Generating..." : "Generate Report"}
         </Button>
         <Button variant="outline" size="sm" onClick={handleRefresh}>
           <RefreshCw className="mr-2 h-4 w-4" />
