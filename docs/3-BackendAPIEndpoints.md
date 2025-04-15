@@ -210,7 +210,7 @@ Starts processing of queued clips.
 - Retrieves the card configuration from the database
 - Checks if the project associated with the card has any face images without any embeddings, if so, generates the embeddings and adds to the database.
 - Checks all clips that have status 'queued' or 'extracting_frames'and starts the frame extraction process from the beginning. When complete, sets the status to 'extraction_complete' or 'error'. 
-- Checks all frames associated with the card with the status 'queud', 'extraction_complete' or 'detecting_faces' and begins face detection process. Once complete, sets the status to 'detection_complete' or 'error'.
+- Checks all frames associated with the card with the status 'queud', or 'detecting_faces' and begins face detection process. Once complete, sets the status to 'detection_complete' or 'error'.
 - Checks for all detected faces in the card with the status 'queued', or 'matching_faces' and matches them against the consent profile embeddings. Once complete, sets the status to 'matching_complete' or 'error'. If there is an error, the frame status is set to 'error'.
 - Once all detected faces have been matched for a given frame, set the frame status to 'recognition_complete'.
 - Once all frames have been processed for a given clip, set the clip status to 'processing_complete'. Do not set the clip status to 'error', this is only the case if frame extraction fails.

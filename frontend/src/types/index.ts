@@ -18,6 +18,9 @@ export interface ConsentFace {
   pose_type: 'F' | 'S';
   face_embedding?: any;
   last_updated: string;
+  consent_profile?: {
+    person_name: string;
+  };
 }
 
 export interface Card {
@@ -26,7 +29,7 @@ export interface Card {
   card_name: string;
   description?: string;
   created_at: string;
-  status: 'pending' | 'paused' | 'processing' | 'complete' | 'generating_embeddings';
+  status: string;
 }
 
 export interface CardConfig {
@@ -60,15 +63,59 @@ export interface WatchFolder {
 export interface Clip {
   clip_id: string;
   card_id: string;
-  watch_folder_id: string;
+  watch_folder_id?: string;
   filename: string;
   path: string;
-  status: 'pending' | 'unselected' | 'queued' | 'extracting_frames' | 'extraction_complete' | 'processing_complete' | 'error';
+  status: string;
   error_message?: string;
 }
 
-export interface ScanConsentFoldersResponse {
+export interface FaceMatch {
+  match_id: string;
+  consent_face: {
+    consent_face_id: string;
+    face_image_path: string;
+    consent_profile: {
+      person_name: string;
+    };
+  };
+  distance: number;
+}
+
+export interface DetectedFace {
+  detection_id: string;
+  confidence: number;
+  facial_area: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
+  face_matches: FaceMatch[];
+}
+
+export interface Frame {
+  frame_id: string;
+  clip_id: string;
+  timestamp: string;
+  raw_frame_image_path: string;
+  processed_frame_image_path: string | null;
   status: string;
+  clip: {
+    clip_id: string;
+    filename: string;
+    status: string;
+  };
+  detected_faces: DetectedFace[];
+  detected_faces_aggregate: {
+    aggregate: {
+      count: number;
+    }
+  };
+}
+
+export interface ScanConsentFoldersResponse {
+  status: 'success' | 'error';
   projects_found: number;
   projects_created: number;
   projects_updated: number;
