@@ -1,9 +1,9 @@
 import boto3
 import logging
 import os
+import re
 from botocore.exceptions import ClientError, NoCredentialsError
 from typing import List, Dict, Any, Optional, Tuple, Union
-from src.utils.env_loader import get_required_env_var
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -208,21 +208,19 @@ class AWSS3Service:
             
             if 'CommonPrefixes' in response:
                 for folder in response['CommonPrefixes']:
-                    full_prefix = folder['Prefix']  # Including base_prefix
+                    full_prefix = folder['Prefix']  # e.g., "base/prefix/ProjectID_ProjectName/"
                     
-                    # Extract folder name from the full path
-                    # If base_prefix is 'consent_data/' and full_prefix is 'consent_data/project1_Name/'
-                    # We want to return just 'project1_Name'
-                    folder_name = full_prefix
-                    if self.base_prefix and full_prefix.startswith(self.base_prefix):
-                        folder_name = full_prefix[len(self.base_prefix):]
+                    # Calculate the name relative to the effective_prefix used in the API call
+                    relative_name = full_prefix
+                    if effective_prefix and relative_name.startswith(effective_prefix):
+                        relative_name = relative_name[len(effective_prefix):]
                     
                     # Remove trailing slash
-                    folder_name = folder_name.rstrip('/')
+                    folder_name = relative_name.rstrip('/')
                     
                     folders.append({
-                        "name": folder_name,
-                        "path": full_prefix
+                        "name": folder_name,    # Should now be just "ProjectID_ProjectName"
+                        "path": full_prefix     # Keep the full path here
                     })
             
             return folders
@@ -396,47 +394,116 @@ def test_aws_s3_service():
             print("3. The bucket name 'chwarel-sandbox' is correct")
             print("4. The bucket exists in the specified region ('us-east-1' by default)")
         
-        # Try with specific prefixes that might exist even if direct access failed
-        print("\nTrying additional folder listing approaches...")
+        # --- Testing Nested Folder Structure Discovery ---
+        print("\n--- Testing Nested Folder Structure Discovery ---")
+
+        # Define the expected base folder name (adjust if different based on your S3 setup)
+        # If your base_prefix in AWSS3Service is set (e.g., "consent_data/"), 
+        # list_folders() with no args will list folders *inside* that.
+        # If base_prefix is empty, it lists from the root.
+        # Adjust consent_base_folder_name if your structure differs.
+        # From your previous output, the top-level folder seems to be "Consent"
+        consent_base_folder_name = "Consent" 
+        
         try:
-            # Try without a prefix first
-            print("\nListing top-level folders (no prefix)...")
-            folders = s3_service.list_folders()
-            print(f"Found {len(folders)} folders:")
-            for folder in folders:
-                print(f"  - {folder['name']} (path: {folder['path']})")
-        except Exception as e:
-            print(f"Error listing top-level folders: {str(e)}")
-        
-        # Try with specific prefixes
-        test_prefixes = ["consent_data/", "projects/", "data/"]
-        for prefix in test_prefixes:
-            print(f"\nTrying to list folders with prefix '{prefix}'...")
-            try:
-                folders = s3_service.list_folders(prefix)
-                print(f"Found {len(folders)} folders:")
-                for folder in folders:
-                    print(f"  - {folder['name']} (path: {folder['path']}")
+            print(f"\n1. Listing top-level folders (expecting '{consent_base_folder_name}')...")
+            # Assuming base_prefix is "" or not set, this lists folders at the root
+            top_level_folders = s3_service.list_folders() 
+            
+            if not top_level_folders:
+                print("  No top-level folders found.")
+                return # Stop if no base folder found
+            
+            consent_base_path = None
+            for folder in top_level_folders:
+                print(f"  - Found: {folder['name']} (path: {folder['path']})")
+                # We need to find the path corresponding to the expected base name
+                if folder['name'] == consent_base_folder_name:
+                    # The 'path' returned includes the base_prefix and the folder name itself
+                    # e.g., if base_prefix="", path="Consent/"
+                    # e.g., if base_prefix="data/", path="data/Consent/"
+                    consent_base_path = folder['path'] 
+                    print(f"  --> Using '{consent_base_path}' as the base for project scanning.")
+                    break # Found the folder we want to scan inside
                     
-                    # If we found folders, try to list files in the first one
-                    if len(folders) > 0:
-                        first_folder = folders[0]
-                        print(f"\n  Files in folder {first_folder['name']}:")
-                        try:
-                            files = s3_service.list_files(first_folder['name'])
-                            if files:
-                                for file in files[:5]:  # Limit to first 5 files for brevity
-                                    print(f"    - {file['name']} (size: {file['size']} bytes)")
-                                if len(files) > 5:
-                                    print(f"    ... and {len(files) - 5} more files")
-                            else:
-                                print("    No files found")
-                        except Exception as e:
-                            print(f"    Error listing files: {str(e)}")
-            except Exception as e:
-                print(f"Error listing folders with prefix '{prefix}': {str(e)}")
+            if consent_base_path is None:
+                print(f"  Error: Expected base folder '{consent_base_folder_name}' not found among top-level folders.")
+                # Depending on your needs, you might want to `return` here or try other folders
+                # For now, we'll stop if the primary consent folder isn't found.
+                return
+
+            print(f"\n2. Listing project folders within '{consent_base_path}'...")
+            # Use the *path* returned by the previous call as the prefix for the next
+            # The list_folders method handles adding base_prefix internally if needed
+            project_folders = s3_service.list_folders(prefix=consent_base_path) 
+            
+            if not project_folders:
+                print(f"  No project folders found within '{consent_base_path}'.")
+                # Decide if you want to stop or continue testing other aspects
+                
+            project_pattern = re.compile(r'^([^_]+)_(.+)$') # ProjectID_ProjectName
+
+            for project_folder in project_folders:
+                # 'name' is relative to the prefix used ('consent_base_path')
+                # 'path' is the full path from the bucket root (including base_prefix)
+                project_name = project_folder['name'] 
+                project_path = project_folder['path']
+                print(f"  - Found Project: {project_name} (path: {project_path})")
+                
+                # Check format
+                match = project_pattern.match(project_name)
+                if match:
+                    print(f"    - Format OK (ID: {match.group(1)}, Name: {match.group(2)})")
+                else:
+                    print(f"    - Warning: Invalid project folder name format: {project_name}")
+
+                print(f"\n3. Listing profile folders within '{project_path}'...")
+                # Use the project folder's full path as the prefix
+                profile_folders = s3_service.list_folders(prefix=project_path) 
+                
+                if not profile_folders:
+                    print(f"    No profile folders found within '{project_path}'.")
+                    continue # Move to the next project
+
+                profile_pattern = re.compile(r'^([^_]+)_(.+)$') # ProfileID_ProfileName
+
+                for profile_folder in profile_folders:
+                    profile_name = profile_folder['name']
+                    profile_path = profile_folder['path']
+                    print(f"    - Found Profile: {profile_name} (path: {profile_path})")
+
+                    # Check format
+                    match = profile_pattern.match(profile_name)
+                    if match:
+                        print(f"      - Format OK (ID: {match.group(1)}, Name: {match.group(2)})")
+                    else:
+                        print(f"      - Warning: Invalid profile folder name format: {profile_name}")
+                        
+                    # Optional: List files within the profile folder
+                    print(f"\n4. Listing files within profile folder '{profile_path}'...")
+                    try:
+                        # Use the profile folder's full path as the prefix for listing files
+                        files = s3_service.list_files(prefix=profile_path)
+                        if files:
+                            print(f"      Found {len(files)} files:")
+                            for file in files[:5]: # Limit output
+                                print(f"        - {file['name']} (size: {file['size']} bytes)")
+                            if len(files) > 5:
+                                print(f"        ... and {len(files) - 5} more files")
+                        else:
+                            print("      No files found in this profile folder.")
+                    except Exception as e:
+                        print(f"      Error listing files in profile folder '{profile_path}': {str(e)}")
+
+
+        except Exception as e:
+            print(f"\nError during nested folder discovery: {str(e)}")
+            import traceback
+            traceback.print_exc() # Keep this for detailed errors
+
+        # The old loop iterating through test_prefixes is implicitly removed by this replacement
         
-        print("\nTest completed!")
+        print("\n--- Test Completed ---")
         
     except Exception as e:
         print(f"Error during test: {str(e)}")
