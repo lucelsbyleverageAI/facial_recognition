@@ -1,5 +1,7 @@
 # Facial Recognition Backend Setup for macOS on Apple Silicon (M1/M2/M3)
 
+> **Note:** For most users, you should use the main `setup.sh` script in the project root, which automates all backend, frontend, and Hasura setup—including table and relationship tracking. This guide is only needed for manual backend troubleshooting or if you encounter Apple Silicon-specific TensorFlow issues. See [`../docs/setup.md`](../docs/setup.md) for the unified workflow.
+
 This guide explains how to set up the facial recognition backend on macOS with Apple Silicon processors (M1, M2, M3).
 
 ## Prerequisites

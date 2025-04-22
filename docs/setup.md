@@ -2,7 +2,7 @@
 
 ## Quick Start: Automated Setup
 
-The setup process for this application is fully automated using the `setup.sh` script provided in the project root. This script will check your system, install dependencies, and prepare everything you need to run the application.
+The setup process for this application is fully automated using the `setup.sh` script provided in the project root. This script will check your system, install dependencies, and prepare everything you need to run the application—including all database tables and relationships in Hasura.
 
 ### To Run the Setup Script:
 
@@ -20,6 +20,8 @@ The setup process for this application is fully automated using the `setup.sh` s
    ```
 
 The script will guide you through the process and print clear instructions if anything is missing or needs your attention.
+
+**Note:** You no longer need to manually track tables or relationships in the Hasura UI. The script will automatically track all tables and foreign key relationships, including 1:1 relationships (such as `cards.card_config`).
 
 ---
 
@@ -89,12 +91,18 @@ The `setup.sh` script automates the following steps:
 4. **Starts Docker Containers:**
    - Launches Postgres and Hasura services using Docker Compose
 
-5. **Final Instructions:**
+5. **Initializes Hasura:**
+   - Automatically tracks all tables and foreign key relationships, including 1:1 relationships (e.g., `cards.card_config`)
+
+6. **Final Instructions:**
    - Prints clear instructions for starting the backend and frontend servers
    - Provides URLs for the Hasura console, backend API, and frontend app
 
 If any required tool or configuration is missing, the script will print a helpful error message and stop, so you can address the issue before continuing.
 
 ---
+
+## Platform-Specific Notes
+- For Apple Silicon (M1/M2/M3), see [`../backend/MAC_SETUP.md`](../backend/MAC_SETUP.md) for TensorFlow build instructions and troubleshooting.
 
 
