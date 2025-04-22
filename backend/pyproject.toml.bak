@@ -7,24 +7,22 @@ readme = "README.md"
 packages = [
     { include = "api", from = "src" },
     { include = "services", from = "src" },
-    { include = "utils", from = "src" }
+    { include = "utils", from = "src" },
+    { include = "tests", from = "src" }
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12"
+python = ">=3.10,<3.11"
 fastapi = "0.115.4"
 uvicorn = "0.29.0"
-deepface = "0.0.93"
-numpy = "1.26.4"
+# deepface = "0.0.93"  # removing this to install separately with --no-deps
+deepface = { version = "0.0.93", markers = 'platform_system != "Darwin" or platform_machine != "arm64"' }
+numpy = "1.23.5"
 opencv-python = "4.10.0.84"
 pillow = "10.2.0"
-tensorboard = "2.19.0"
-tensorboard-data-server = "0.7.2"
+tensorboard = ">=2.12,<2.13"
+tensorboard-data-server = ">=0.7.0,<0.8.0"
 tensorboard-plugin-wit = "1.8.1"
-tensorflow = "2.19.0"
-tf-keras = "2.19.0"
-# Using wildcard for tensorflow-io-gcs-filesystem since we build it from source
-tensorflow-io-gcs-filesystem = "*"
 matplotlib = "3.8.1"
 pandas = "2.2.3"
 psutil = "6.1.0"
@@ -41,6 +39,10 @@ boto3 = "^1.37.34"
 httpx = "^0.28.1"
 jinja2 = "^3.1.6"
 
+# --- TensorFlow wheels ---
+# Only macOS ARM64 wheels - removed standard tensorflow as it's not compatible with macOS ARM64
+tensorflow-macos = { version = "~2.12.0", markers = 'platform_system == "Darwin" and platform_machine == "arm64"' }
+tensorflow-metal = { version = "~1.0.0", markers = 'platform_system == "Darwin" and platform_machine == "arm64"' }
 
 [build-system]
 requires = ["poetry-core"]

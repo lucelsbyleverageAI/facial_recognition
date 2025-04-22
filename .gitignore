@@ -17,3 +17,5 @@ hasura/config.yaml
 
 
 backend/outputs/
+
+backend/.venv/

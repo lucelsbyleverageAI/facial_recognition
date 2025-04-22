@@ -1,0 +1,191 @@
+{
+  "version": 3,
+  "sources": [
+    {
+      "name": "default",
+      "kind": "postgres",
+      "tables": [
+        {
+          "table": {
+            "schema": "public",
+            "name": "projects"
+          },
+          "select_permissions": [
+            {
+              "role": "admin",
+              "permission": {
+                "columns": "*",
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "schema": "public",
+            "name": "consent_profiles"
+          },
+          "select_permissions": [
+            {
+              "role": "admin",
+              "permission": {
+                "columns": "*",
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "schema": "public",
+            "name": "consent_faces"
+          },
+          "select_permissions": [
+            {
+              "role": "admin",
+              "permission": {
+                "columns": "*",
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "schema": "public",
+            "name": "cards"
+          },
+          "select_permissions": [
+            {
+              "role": "admin",
+              "permission": {
+                "columns": "*",
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "schema": "public",
+            "name": "card_configs"
+          },
+          "select_permissions": [
+            {
+              "role": "admin",
+              "permission": {
+                "columns": "*",
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "schema": "public",
+            "name": "watch_folders"
+          },
+          "select_permissions": [
+            {
+              "role": "admin",
+              "permission": {
+                "columns": "*",
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "schema": "public",
+            "name": "clips"
+          },
+          "select_permissions": [
+            {
+              "role": "admin",
+              "permission": {
+                "columns": "*",
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "schema": "public",
+            "name": "frames"
+          },
+          "select_permissions": [
+            {
+              "role": "admin",
+              "permission": {
+                "columns": "*",
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "schema": "public",
+            "name": "detected_faces"
+          },
+          "select_permissions": [
+            {
+              "role": "admin",
+              "permission": {
+                "columns": "*",
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "schema": "public",
+            "name": "face_matches"
+          },
+          "select_permissions": [
+            {
+              "role": "admin",
+              "permission": {
+                "columns": "*",
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "schema": "public",
+            "name": "processing_tasks"
+          },
+          "select_permissions": [
+            {
+              "role": "admin",
+              "permission": {
+                "columns": "*",
+                "filter": {}
+              }
+            }
+          ]
+        }
+      ],
+      "configuration": {
+        "connection_info": {
+          "use_prepared_statements": true,
+          "database_url": {
+            "from_env": "HASURA_GRAPHQL_DATABASE_URL"
+          },
+          "isolation_level": "read-committed",
+          "pool_settings": {
+            "connection_lifetime": 600,
+            "idle_timeout": 180,
+            "max_connections": 50,
+            "retries": 1
+          }
+        }
+      }
+    }
+  ]
+} 
