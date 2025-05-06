@@ -17,5 +17,7 @@ hasura/config.yaml
 
 
 backend/outputs/
+backend/consent/Consent/
+backend/consent/
 
 backend/.venv/
