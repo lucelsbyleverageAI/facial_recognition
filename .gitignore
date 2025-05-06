@@ -1,4 +1,4 @@
-.env
+
 venv/
 postgres_data/
 **/cache/
