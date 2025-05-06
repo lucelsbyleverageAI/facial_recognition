@@ -441,7 +441,8 @@ class FrameExtractor:
         timestamps = []
         for line in ffmpeg_output.splitlines():
             if 'pts_time:' in line:
-                match = re.search(r'pts_time:(\d+\.\d+)', line)
+                # Updated regex to handle both integer and decimal timestamps
+                match = re.search(r'pts_time:(\d+(?:\.\d+)?)', line)
                 if match:
                     timestamps.append(float(match.group(1)))
         

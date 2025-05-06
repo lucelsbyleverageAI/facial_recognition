@@ -24,23 +24,23 @@ interface ScanConsentFoldersProps {
 export function ScanConsentFolders({ onScanComplete }: ScanConsentFoldersProps) {
   const [open, setOpen] = useState(false);
   const [folderPath, setFolderPath] = useState('');
+  const [useS3, setUseS3] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const handleScan = async () => {
-    if (!folderPath) {
+    if (!useS3 && !folderPath) {
       setError('Please enter a folder path');
       return;
     }
-    
     setError(null);
     setLoading(true);
-    
     try {
-      const response = await scanConsentFolders(folderPath);
+      const response = await scanConsentFolders(folderPath, useS3);
       onScanComplete?.(response);
       setOpen(false);
       setFolderPath('');
+      setUseS3(false);
     } catch (err) {
       console.error('Error scanning consent folders:', err);
       setError(err instanceof Error ? err.message : 'Failed to scan consent folders');
@@ -61,25 +61,49 @@ export function ScanConsentFolders({ onScanComplete }: ScanConsentFoldersProps) 
         <DialogHeader>
           <DialogTitle>Scan Consent Folders</DialogTitle>
           <DialogDescription>
-            Enter the path to your consent folders to import projects and consent profiles.
+            Choose to scan a local folder or your S3 bucket for consent projects and profiles.
           </DialogDescription>
         </DialogHeader>
-        
         <div className="space-y-4 py-6">
-          <div className="space-y-2">
-            <label htmlFor="folderPath" className="text-sm font-medium">
-              Consent Folder Path
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-1">
+              <input
+                type="radio"
+                name="scanType"
+                value="local"
+                checked={!useS3}
+                onChange={() => setUseS3(false)}
+                disabled={loading}
+              />
+              <span>Scan Local Folder</span>
             </label>
-            <Input
-              id="folderPath"
-              value={folderPath}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setFolderPath(e.target.value)}
-              placeholder="e.g., C:/consent_folders"
-              disabled={loading}
-              className="font-mono"
-            />
+            <label className="flex items-center gap-1">
+              <input
+                type="radio"
+                name="scanType"
+                value="s3"
+                checked={useS3}
+                onChange={() => setUseS3(true)}
+                disabled={loading}
+              />
+              <span>Scan S3 Bucket</span>
+            </label>
           </div>
-          
+          {!useS3 && (
+            <div className="space-y-2">
+              <label htmlFor="folderPath" className="text-sm font-medium">
+                Consent Folder Path
+              </label>
+              <Input
+                id="folderPath"
+                value={folderPath}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setFolderPath(e.target.value)}
+                placeholder="e.g., C:/consent_folders"
+                disabled={loading}
+                className="font-mono"
+              />
+            </div>
+          )}
           {error && (
             <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               <div className="flex items-center gap-2">
@@ -93,7 +117,6 @@ export function ScanConsentFolders({ onScanComplete }: ScanConsentFoldersProps) 
             </div>
           )}
         </div>
-        
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
             Cancel

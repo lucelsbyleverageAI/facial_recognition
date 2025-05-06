@@ -26,7 +26,7 @@ class ProjectImportOrchestrator:
         Args:
             consent_folder_path: Path to the consent folders. If None, uses the default.
         """
-        self.consent_folder_path = consent_folder_path or r"C:\Users\LucElsby\Documents\code_repos\chwarel\facial_recognition\Test Inputs\Consent"
+        self.consent_folder_path = consent_folder_path or r"/Users/lucelsby/Documents/repos/chwarel/facial_recognition/Test Inputs/Consent"
         
         # Initialize the GraphQL client
         self.graphql_client = self._initialize_graphql_client()

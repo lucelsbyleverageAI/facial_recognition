@@ -112,10 +112,30 @@ export function useFrameResults({
       whereConditions.push({ status: { _in: filters.status } });
     }
     
-    // Note: resultType filter is applied client-side, so it's not included here
+    // Backend filtering for resultType
+    if (filters.resultType === 'detected') {
+      whereConditions.push({ detected_faces: { detection_id: { _is_null: false } } });
+    }
+    if (filters.resultType === 'matched') {
+      whereConditions.push({
+        detected_faces: {
+          face_matches: { match_id: { _is_null: false } }
+        }
+      });
+    }
+    if (filters.resultType === 'unmatched') {
+      whereConditions.push({
+        detected_faces: { detection_id: { _is_null: false } },
+        _not: {
+          detected_faces: {
+            face_matches: { match_id: { _is_null: false } }
+          }
+        }
+      });
+    }
 
     return { _and: whereConditions };
-  }, [cardId, filters.clipId, filters.status]);
+  }, [cardId, filters.clipId, filters.status, filters.resultType]);
 
   // Variables for the frame subscription
   const frameVariables = useMemo(() => ({
@@ -170,34 +190,11 @@ export function useFrameResults({
     { variables: clipVariables }
   );
   
-  // Process frames data - Apply only client-side filters (resultType)
+  // Process frames data - No client-side resultType filtering needed
   const processedFrames = useMemo(() => {
     if (!framesData?.frames) return [];
-    
-    let filtered = [...framesData.frames]; // Start with data already filtered by server
-    
-    // Apply result type filter (client-side)
-    if (filters.resultType !== 'all') {
-      filtered = filtered.filter(frame => {
-        const detectedCount = frame.detected_faces_aggregate.aggregate.count;
-        const matchedCount = frame.detected_faces.reduce((count: number, face: DetectedFace) => 
-          face.face_matches && face.face_matches.length > 0 ? count + 1 : count, 0);
-        
-        switch (filters.resultType) {
-          case 'detected': 
-            return detectedCount > 0;
-          case 'matched':
-            return matchedCount > 0;
-          case 'unmatched':
-            return detectedCount > 0 && matchedCount === 0;
-          default:
-            return true;
-        }
-      });
-    }
-    
-    return filtered;
-  }, [framesData, filters.resultType]);
+    return framesData.frames;
+  }, [framesData]);
   
   // Get the actual total count from the aggregate query
   const totalCount = aggregateData?.frames_aggregate?.aggregate?.count || 0;

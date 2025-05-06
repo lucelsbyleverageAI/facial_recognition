@@ -10,8 +10,8 @@ const api = axios.create({
   },
 });
 
-export const scanConsentFolders = async (consentFolderPath: string): Promise<ScanConsentFoldersResponse> => {
-  const response = await api.post('/scan-consent-folders', { consent_folder_path: consentFolderPath });
+export const scanConsentFolders = async (consentFolderPath: string, useS3: boolean = false): Promise<ScanConsentFoldersResponse> => {
+  const response = await api.post('/scan-consent-folders', { consent_folder_path: consentFolderPath, use_s3: useS3 });
   return response.data;
 };
 

@@ -6,6 +6,7 @@ import os
 import datetime
 
 from src.services.project_import.project_import_orchestrator import ProjectImportOrchestrator
+from src.services.project_import.s3_project_import_orchestrator import S3ProjectImportOrchestrator
 from src.utils.env_loader import get_required_env_var
 
 # Configure logging
@@ -21,6 +22,7 @@ router = APIRouter(
 class ScanConsentFoldersRequest(BaseModel):
     """Request model for the scan-consent-folders endpoint."""
     consent_folder_path: Optional[str] = None
+    use_s3: Optional[bool] = False
 
 class ScanConsentFoldersResponse(BaseModel):
     """Response model for the scan-consent-folders endpoint."""
@@ -69,6 +71,27 @@ async def scan_consent_folders(request: ScanConsentFoldersRequest):
         
         # Get the consent folder path
         consent_folder_path = request.consent_folder_path
+        
+        if request.use_s3:
+            print("S3 scan requested. Running S3ProjectImportOrchestrator...")
+            # Treat 'string' as empty string for S3 prefix
+            s3_prefix = consent_folder_path if consent_folder_path and consent_folder_path != "string" else ""
+            s3_orchestrator = S3ProjectImportOrchestrator(s3_prefix=s3_prefix)
+            stats = await s3_orchestrator.import_all_project_data(s3_prefix)
+            response = ScanConsentFoldersResponse(
+                status="success",
+                projects_found=stats.get("projects_found", 0),
+                projects_created=stats.get("projects_created", 0),
+                projects_updated=stats.get("projects_updated", 0),
+                consent_profiles_found=stats.get("consent_profiles_found", 0),
+                consent_profiles_created=stats.get("consent_profiles_created", 0),
+                consent_profiles_updated=stats.get("consent_profiles_updated", 0),
+                consent_images_found=stats.get("consent_images_found", 0),
+                consent_images_created=stats.get("consent_images_created", 0),
+                consent_images_updated=stats.get("consent_images_updated", 0),
+                consent_images_preserved=stats.get("consent_images_with_embeddings_preserved", 0)
+            )
+            return response
         
         print("Creating ProjectImportOrchestrator...")
         orchestrator = ProjectImportOrchestrator(consent_folder_path)

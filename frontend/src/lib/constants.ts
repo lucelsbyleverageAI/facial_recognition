@@ -1,1 +1,1 @@
-export const CONSENT_FOLDER_PATH = "C:\\Users\\LucElsby\\Documents\\code_repos\\chwarel\\facial_recognition\\Test Inputs\\Consent"; 
+export const CONSENT_FOLDER_PATH = "/Users/lucelsby/Documents/repos/chwarel/facial_recognition/Test Inputs/Consent"; 
